@@ -1,0 +1,150 @@
+# Point of Sale System - Production Deployment
+#
+# Prerequisites on the server:
+#   1. docker login ghcr.io -u <technical-user> -p <PAT>
+#   2. cp .env.example .env && nano .env   (set IMAGE_* tags and credentials)
+#
+# Start: docker compose -f docker-compose.prod.yml up -d
+# Stop:  docker compose -f docker-compose.prod.yml down
+
+name: point-of-sale-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    tag: "{{.Name}}"
+
+services:
+  # ===========================================================================
+  # DATABASE - PostgreSQL 17
+  # ===========================================================================
+  database:
+    image: postgres:17-alpine
+    container_name: pos-database
+    hostname: pos-database
+    env_file: .env
+    volumes:
+      - pos-db-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - pos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+
+  # ===========================================================================
+  # CACHE - Redis 8
+  # ===========================================================================
+  redis:
+    image: redis:8-alpine
+    container_name: pos-redis
+    hostname: pos-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - pos-redis-data:/data
+    networks:
+      - pos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+
+  # ===========================================================================
+  # BACKEND - FastAPI
+  # ===========================================================================
+  backend:
+    image: ${IMAGE_BACKEND}
+    container_name: pos-backend
+    hostname: pos-backend
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+    # Port not exposed: all traffic enters via the frontend Nginx on port 80
+    networks:
+      - pos-network
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  # ===========================================================================
+  # FRONTEND - React PWA (Nginx, production build)
+  # The Nginx inside this container proxies /api/ and /images/ to the
+  # respective backend containers. No VITE_* variables needed — the frontend
+  # code uses relative paths (/api/v1, /images) that work on any server.
+  # ===========================================================================
+  frontend:
+    image: ${IMAGE_FRONTEND}
+    container_name: pos-frontend
+    hostname: pos-frontend
+    ports:
+      - "${POS_PUBLIC_PORT}:80"
+    networks:
+      - pos-network
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *default-logging
+
+  # ===========================================================================
+  # IMAGE SERVICE - Upload & Thumbnails
+  # ===========================================================================
+  image-service:
+    image: ${IMAGE_IMAGE_SERVICE}
+    container_name: pos-image-service
+    hostname: pos-image-service
+    # Port not exposed: proxied via the frontend Nginx (/images/)
+    volumes:
+      - pos-image-data:/data/images
+    networks:
+      - pos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  pos-db-data:
+    name: pos-db-data
+  pos-redis-data:
+    name: pos-redis-data
+  pos-image-data:
+    name: pos-image-data
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  pos-network:
+    driver: bridge
+    name: pos-network
