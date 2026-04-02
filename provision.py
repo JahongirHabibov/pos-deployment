@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--api-url",
         required=True,
-        help="Base URL of the Legisell API (e.g. https://admin.legisell.com)",
+        help="Base URL of the Legisell API (e.g. https://admin.legisell.de)",
     )
     parser.add_argument(
         "--env-example",
