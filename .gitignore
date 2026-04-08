@@ -1,0 +1,15 @@
+# ── Secrets & generated environment files ────────────────────────────────────
+.env
+.env.backup
+*.env.backup
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── OS / editor artefacts ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
