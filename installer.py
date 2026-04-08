@@ -323,8 +323,9 @@ class InstallerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(t("title"))
-        self.root.resizable(False, False)
-        self.root.geometry("840x680")
+        self.root.resizable(True, True)
+        self.root.geometry("860x860")
+        self.root.minsize(840, 700)
         self.root.configure(bg="#ffffff")
 
         # Shared state collected across steps
@@ -382,13 +383,13 @@ class InstallerApp:
             lbl.pack(side=tk.LEFT)
             self._step_lbls.append(lbl)
 
-        # Content area
+        # Navigation bar — packed BEFORE content so it never gets clipped
+        nav = tk.Frame(self.root, bg="white", pady=10)
+        nav.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Content area — fills remaining space, scrollable on resize
         self._content = tk.Frame(self.root, bg="white", padx=28, pady=20)
         self._content.pack(fill=tk.BOTH, expand=True)
-
-        # Navigation bar
-        nav = tk.Frame(self.root, bg="white", pady=10)
-        nav.pack(fill=tk.X)
         self._btn_back = tk.Button(
             nav, text=t("btn_back"), width=12,
             bg="#f0f0f0", relief=tk.FLAT,
