@@ -10,8 +10,10 @@ Leads a distributor through 3 guided steps:
 No Docker or Linux knowledge required from the distributor.
 """
 
+import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -79,7 +81,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "s2_lbl_user":        "GHCR Benutzername:",
         "s2_lbl_token":       "GHCR Token / PAT:",
         "s2_show_token":      "Token anzeigen",
-        "s2_err_missing":     "Bitte Benutzername und Token eingeben.",
+        "s2_lbl_sudo":        "Sudo-Passwort:",
+        "s2_show_sudo":       "Passwort anzeigen",
+        "s2_err_missing":     "Bitte Benutzername, Token und Sudo-Passwort eingeben.",
         "s2_connecting":      "Verbinde mit ghcr.io \u2026",
         "s2_no_docker":       "\u2717 'docker' nicht gefunden. Ist Docker installiert?",
         "s2_login_ok":        "\u2713 Login erfolgreich!",
@@ -101,7 +105,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "s3_log_success":     "\u2713 Deployment erfolgreich abgeschlossen!",
         "s3_log_url":         "  \u2192 System erreichbar unter: http://localhost:{port}",
         "s3_log_fail":        "\n\u2717 Deployment fehlgeschlagen. Bitte den Log prüfen.",
-        "s3_log_tip":         "  Tipp: docker compose -f docker-compose.prod.yml logs",
+        "s3_log_tip":         "  Tipp: sudo docker compose -f docker-compose.prod.yml logs",
+        # ── Step 3 sudo
+        "s3_lbl_sudo":        "Sudo-Passwort:",
+        "s3_show_sudo":       "Passwort anzeigen",
+        "s3_err_no_sudo":     "Bitte das Sudo-Passwort eingeben.",
         # ── Errors / dialogs
         "err_title_missing":  "Fehlende Eingaben",
         "err_prereq_title":   "Fehler beim Start",
@@ -110,6 +118,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "err_no_envexample":  ".env.example nicht gefunden in {dir}",
         "err_no_compose":     "docker-compose.prod.yml nicht gefunden in {dir}",
         "err_no_docker":      "Docker ist nicht installiert oder nicht im PATH.",
+        "err_no_sudo":        "sudo ist nicht installiert oder nicht im PATH.",
+        # ── Skip-setup mode
+        "skip_banner":        "⏭ Schritte 1 & 2 übersprungen (--skip-setup)",
+        "skip_no_env":        ".env nicht gefunden — bitte zuerst ohne --skip-setup ausführen.",
+        "skip_step_label":    "übersprungen",
     },
     "en": {
         # ── Chrome
@@ -146,7 +159,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "s2_lbl_user":        "GHCR Username:",
         "s2_lbl_token":       "GHCR Token / PAT:",
         "s2_show_token":      "Show token",
-        "s2_err_missing":     "Please enter username and token.",
+        "s2_lbl_sudo":        "Sudo Password:",
+        "s2_show_sudo":       "Show password",
+        "s2_err_missing":     "Please enter username, token, and sudo password.",
         "s2_connecting":      "Connecting to ghcr.io \u2026",
         "s2_no_docker":       "\u2717 'docker' not found. Is Docker installed?",
         "s2_login_ok":        "\u2713 Login successful!",
@@ -168,7 +183,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "s3_log_success":     "\u2713 Deployment completed successfully!",
         "s3_log_url":         "  \u2192 System available at: http://localhost:{port}",
         "s3_log_fail":        "\n\u2717 Deployment failed. Please check the log.",
-        "s3_log_tip":         "  Tip: docker compose -f docker-compose.prod.yml logs",
+        "s3_log_tip":         "  Tip: sudo docker compose -f docker-compose.prod.yml logs",
+        # ── Step 3 sudo
+        "s3_lbl_sudo":        "Sudo Password:",
+        "s3_show_sudo":       "Show password",
+        "s3_err_no_sudo":     "Please enter the sudo password.",
         # ── Errors / dialogs
         "err_title_missing":  "Missing Input",
         "err_prereq_title":   "Startup Error",
@@ -177,6 +196,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "err_no_envexample":  ".env.example not found in {dir}",
         "err_no_compose":     "docker-compose.prod.yml not found in {dir}",
         "err_no_docker":      "Docker is not installed or not in PATH.",
+        "err_no_sudo":        "sudo is not installed or not in PATH.",
+        # ── Skip-setup mode
+        "skip_banner":        "⏭ Steps 1 & 2 skipped (--skip-setup)",
+        "skip_no_env":        ".env not found — please run once without --skip-setup first.",
+        "skip_step_label":    "skipped",
     },
     "ru": {
         # ── Chrome
@@ -213,7 +237,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "s2_lbl_user":        "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c GHCR:",
         "s2_lbl_token":       "\u0422\u043e\u043a\u0435\u043d GHCR / PAT:",
         "s2_show_token":      "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0442\u043e\u043a\u0435\u043d",
-        "s2_err_missing":     "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0438\u043c\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f \u0438 \u0442\u043e\u043a\u0435\u043d.",
+        "s2_lbl_sudo":        "Sudo-\u043f\u0430\u0440\u043e\u043b\u044c:",
+        "s2_show_sudo":       "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c",
+        "s2_err_missing":     "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0438\u043c\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f, \u0442\u043e\u043a\u0435\u043d \u0438 sudo-\u043f\u0430\u0440\u043e\u043b\u044c.",
         "s2_connecting":      "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a ghcr.io \u2026",
         "s2_no_docker":       "\u2717 'docker' \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d. \u0423\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u043b\u0438 Docker?",
         "s2_login_ok":        "\u2713 \u0412\u0445\u043e\u0434 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d \u0443\u0441\u043f\u0435\u0448\u043d\u043e!",
@@ -235,7 +261,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "s3_log_success":     "\u2713 \u0420\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435 \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043e!",
         "s3_log_url":         "  \u2192 \u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u043f\u043e \u0430\u0434\u0440\u0435\u0441\u0443: http://localhost:{port}",
         "s3_log_fail":        "\n\u2717 \u0420\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435 \u043d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0436\u0443\u0440\u043d\u0430\u043b.",
-        "s3_log_tip":         "  \u0421\u043e\u0432\u0435\u0442: docker compose -f docker-compose.prod.yml logs",
+        "s3_log_tip":         "  \u0421\u043e\u0432\u0435\u0442: sudo docker compose -f docker-compose.prod.yml logs",
+        # ── Step 3 sudo
+        "s3_lbl_sudo":        "Sudo-\u043f\u0430\u0440\u043e\u043b\u044c:",
+        "s3_show_sudo":       "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c",
+        "s3_err_no_sudo":     "\u041f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u0432\u0432\u0435\u0434\u0438\u0442\u0435 sudo-\u043f\u0430\u0440\u043e\u043b\u044c.",
         # ── Errors / dialogs
         "err_title_missing":  "\u041d\u0435\u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435 \u043f\u043e\u043b\u044f",
         "err_prereq_title":   "\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0443\u0441\u043a\u0430",
@@ -244,6 +274,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "err_no_envexample":  ".env.example \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 {dir}",
         "err_no_compose":     "docker-compose.prod.yml \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 {dir}",
         "err_no_docker":      "Docker \u043d\u0435 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u0438\u043b\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 PATH.",
+        "err_no_sudo":        "sudo \u043d\u0435 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u0438\u043b\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 PATH.",
+        # ── Skip-setup mode
+        "skip_banner":        "\u23ed \u0428\u0430\u0433\u0438 1 \u0438 2 \u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u044b (--skip-setup)",
+        "skip_no_env":        ".env \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u2014 \u0441\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u0435 \u0431\u0435\u0437 --skip-setup.",
+        "skip_step_label":    "\u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u043e",
     },
 }
 
@@ -320,7 +355,7 @@ def _export_env_to_os_environ(env: dict) -> None:
 class InstallerApp:
     _STEP_KEYS = ["step1_tab", "step2_tab", "step3_tab"]
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, *, skip_setup: bool = False) -> None:
         self.root = root
         self.root.title(t("title"))
         self.root.resizable(True, True)
@@ -331,9 +366,10 @@ class InstallerApp:
         # Shared state collected across steps
         self._data: dict[str, str] = {}
         self._current_step = 0
+        self._skip_setup = skip_setup
 
         self._build_chrome()
-        self._show_step(0)
+        self._show_step(2 if skip_setup else 0)
 
     # ── Chrome (header + step indicator + nav bar) ────────────────────────────
 
@@ -424,7 +460,13 @@ class InstallerApp:
 
     def _update_step_indicator(self) -> None:
         for i, lbl in enumerate(self._step_lbls):
-            if i < self._current_step:
+            if self._skip_setup and i < 2:
+                lbl.configure(
+                    text=f"{t(self._STEP_KEYS[i])} ({t('skip_step_label')})",
+                    bg="#fff3cd", fg="#856404",
+                    font=("Segoe UI", 10, "italic"),
+                )
+            elif i < self._current_step:
                 lbl.configure(bg="#c8e6c9", fg="#2e7d32",
                                font=("Segoe UI", 10, "bold"))
             elif i == self._current_step:
@@ -446,9 +488,11 @@ class InstallerApp:
         builders = [self._build_step1, self._build_step2, self._build_step3]
         builders[step]()
 
+        # In skip mode, disable back button on step 3
+        min_step = 2 if self._skip_setup else 0
         self._btn_back.configure(
             text=t("btn_back"),
-            state=tk.NORMAL if step > 0 else tk.DISABLED,
+            state=tk.NORMAL if step > min_step else tk.DISABLED,
         )
         self._btn_next.configure(
             text=t("btn_install") if step == 2 else t("btn_next"),
@@ -546,7 +590,8 @@ class InstallerApp:
             return
 
         self._data.update(vals)
-        self._set_nav(back=False, next_=False)
+        self._btn_next.configure(state=tk.DISABLED)
+        self._btn_back.configure(state=tk.DISABLED)
 
         def task() -> None:
             self._log(self._s1_log,
@@ -631,10 +676,27 @@ class InstallerApp:
             bg="white", font=("Segoe UI", 9),
         ).grid(row=4, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
 
+        tk.Label(c, text=t("s2_lbl_sudo"), bg="white",
+                 font=("Segoe UI", 10), width=26, anchor="w").grid(
+            row=5, column=0, sticky="w", pady=8)
+        self._s2_sudo = tk.StringVar(value=self._data.get("sudo_password", ""))
+        self._s2_sudo_entry = tk.Entry(
+            c, textvariable=self._s2_sudo, width=44, show="*",
+            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
+        self._s2_sudo_entry.grid(row=5, column=1, sticky="w", padx=(8, 0))
+
+        self._s2_show_sudo = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            c, text=t("s2_show_sudo"),
+            variable=self._s2_show_sudo,
+            command=self._toggle_sudo_visibility,
+            bg="white", font=("Segoe UI", 9),
+        ).grid(row=6, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
+
         self._s2_status = tk.Label(
             c, text="", bg="white", font=("Segoe UI", 10),
             wraplength=720, justify=tk.LEFT)
-        self._s2_status.grid(row=6, column=0, columnspan=3,
+        self._s2_status.grid(row=8, column=0, columnspan=3,
                               sticky="w", pady=(24, 0))
         c.columnconfigure(1, weight=1)
 
@@ -643,25 +705,42 @@ class InstallerApp:
             show="" if self._s2_show_token.get() else "*"
         )
 
+    def _toggle_sudo_visibility(self) -> None:
+        self._s2_sudo_entry.configure(
+            show="" if self._s2_show_sudo.get() else "*"
+        )
+
+    def _toggle_step3_sudo_visibility(self) -> None:
+        if self._s3_sudo_entry is not None:
+            self._s3_sudo_entry.configure(
+                show="" if self._s3_show_sudo_var.get() else "*"
+            )
+
     def _run_step2(self) -> None:
-        user  = self._s2_user.get().strip()
-        token = self._s2_token.get().strip()
-        if not user or not token:
+        user         = self._s2_user.get().strip()
+        token        = self._s2_token.get().strip()
+        sudo_password = self._s2_sudo.get()
+        if not user or not token or not sudo_password:
             messagebox.showerror(t("err_title_missing"), t("s2_err_missing"))
             return
 
-        self._data["ghcr_user"]  = user
-        self._data["ghcr_token"] = token
-        self._set_nav(back=False, next_=False)
+        self._data["ghcr_user"]      = user
+        self._data["ghcr_token"]     = token
+        self._data["sudo_password"]  = sudo_password
+        self._btn_next.configure(state=tk.DISABLED)
+        self._btn_back.configure(state=tk.DISABLED)
         self.root.after(0, lambda: self._s2_status.configure(
             text=t("s2_connecting"), fg=C_INFO))
 
         def task() -> None:
             try:
                 result = subprocess.run(
-                    ["docker", "login", "ghcr.io",
+                    ["sudo", "-k", "-S",
+                     "docker", "login", "ghcr.io",
                      "-u", user, "--password-stdin"],
-                    input=token,
+                    # sudo reads the first line as its password;
+                    # docker login reads the remainder as the registry token.
+                    input=sudo_password + "\n" + token,
                     capture_output=True,
                     text=True,
                 )
@@ -672,10 +751,7 @@ class InstallerApp:
                 return
 
             combined = (result.stdout + result.stderr).strip()
-            success  = result.returncode == 0 and (
-                "Login Succeeded" in combined
-                or "Login succeeded" in combined
-            )
+            success  = result.returncode == 0
 
             if success:
                 self.root.after(0, lambda: self._s2_status.configure(
@@ -697,6 +773,19 @@ class InstallerApp:
                  font=("Segoe UI", 13, "bold"), bg="white").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
+        next_row = 1
+        if self._skip_setup:
+            banner = tk.Label(
+                c, text=t("skip_banner"),
+                bg="#fff3cd", fg="#856404",
+                font=("Segoe UI", 10, "bold"),
+                anchor="w", padx=10, pady=6,
+                relief=tk.GROOVE, bd=1,
+            )
+            banner.grid(row=next_row, column=0, columnspan=2,
+                        sticky="ew", pady=(0, 10))
+            next_row += 1
+
         env = _read_env_keys([
             "APP_NAME", "POS_PUBLIC_PORT",
             "POSTGRES_DB", "POSTGRES_SERVER",
@@ -717,7 +806,7 @@ class InstallerApp:
 
         box = tk.Frame(c, bg="#f0f4ff", relief=tk.RIDGE, bd=1,
                        padx=16, pady=12)
-        box.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        box.grid(row=next_row, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         for i, (k, v) in enumerate(summary):
             tk.Label(box, text=k + ":", bg="#f0f4ff", anchor="w", width=26,
                      font=("Segoe UI", 9, "bold")).grid(
@@ -731,11 +820,33 @@ class InstallerApp:
             c,
             text=t("s3_hint"),
             bg="white", fg="#555", font=("Segoe UI", 9),
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        ).grid(row=next_row+1, column=0, columnspan=2, sticky="w", pady=(0, 6))
+
+        # Sudo-Passwort-Feld — nur anzeigen wenn Schritt 2 übersprungen wurde
+        self._s3_sudo_var: tk.StringVar | None = None
+        self._s3_sudo_entry: tk.Entry | None = None
+        sudo_row_offset = 0
+        if not self._data.get("sudo_password"):
+            sudo_row_offset = 2
+            tk.Label(c, text=t("s3_lbl_sudo"), bg="white",
+                     font=("Segoe UI", 10), width=26, anchor="w").grid(
+                row=next_row+2, column=0, sticky="w", pady=8)
+            self._s3_sudo_var = tk.StringVar()
+            self._s3_sudo_entry = tk.Entry(
+                c, textvariable=self._s3_sudo_var, width=44, show="*",
+                font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
+            self._s3_sudo_entry.grid(row=next_row+2, column=1, sticky="w", padx=(8, 0))
+            self._s3_show_sudo_var = tk.BooleanVar(value=False)
+            tk.Checkbutton(
+                c, text=t("s3_show_sudo"),
+                variable=self._s3_show_sudo_var,
+                command=self._toggle_step3_sudo_visibility,
+                bg="white", font=("Segoe UI", 9),
+            ).grid(row=next_row+3, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
 
         tk.Label(c, text=t("s3_lbl_log"), bg="white",
                  font=("Segoe UI", 10, "bold")).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(4, 2))
+            row=next_row+2+sudo_row_offset, column=0, columnspan=2, sticky="w", pady=(4, 2))
 
         self._s3_log = scrolledtext.ScrolledText(
             c, height=15, width=82, font=("Courier", 9),
@@ -744,21 +855,33 @@ class InstallerApp:
             insertbackground="white",
             relief=tk.SOLID, bd=1,
         )
-        self._s3_log.grid(row=4, column=0, columnspan=2)
+        self._s3_log.grid(row=next_row+3+sudo_row_offset, column=0, columnspan=2)
         c.columnconfigure(1, weight=1)
 
     def _run_step3(self) -> None:
-        self._set_nav(back=False, next_=False)
+        self._btn_next.configure(state=tk.DISABLED)  # sofortiges Deaktivieren (verhindert Doppelklick)
+
+        if self._s3_sudo_var is not None:
+            sudo_password_in = self._s3_sudo_var.get()
+            if not sudo_password_in:
+                messagebox.showerror(t("err_title_missing"), t("s3_err_no_sudo"))
+                self._btn_next.configure(state=tk.NORMAL)
+                return
+            self._data["sudo_password"] = sudo_password_in
+
+        self._btn_back.configure(state=tk.DISABLED)
 
         def task() -> None:
             self._log(self._s3_log,
-                      "▶ docker compose -f docker-compose.prod.yml up -d", "#7ec8e3")
+                      "▶ sudo docker compose -f docker-compose.prod.yml up -d", "#7ec8e3")
             self._log(self._s3_log, t("s3_log_pulling"), "#aaaaaa")
 
             env = os.environ.copy()
             _export_env_to_os_environ(env)
 
+            sudo_password = self._data.get("sudo_password", "")
             cmd = [
+                "sudo", "-k", "-S",
                 "docker", "compose",
                 "-f", str(COMPOSE_FILE),
                 "up", "-d",
@@ -766,12 +889,17 @@ class InstallerApp:
             try:
                 proc = subprocess.Popen(
                     cmd,
+                    stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
                     cwd=str(REPO_DIR),
                     env=env,
                 )
+                assert proc.stdin is not None
+                proc.stdin.write(sudo_password + "\n")
+                proc.stdin.flush()
+                proc.stdin.close()
             except FileNotFoundError:
                 self._log(self._s3_log, t("s3_no_docker"), C_DANGER)
                 self._set_nav(back=True, next_=False)
@@ -779,7 +907,10 @@ class InstallerApp:
 
             assert proc.stdout is not None
             for line in proc.stdout:
-                self._log(self._s3_log, line.rstrip())
+                clean = line.rstrip()
+                if clean.startswith("[sudo]"):
+                    continue  # suppress sudo's password prompt
+                self._log(self._s3_log, clean)
             proc.wait()
 
             if proc.returncode == 0:
@@ -810,26 +941,38 @@ class InstallerApp:
 # Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _check_prerequisites() -> list[str]:
+def _check_prerequisites(*, skip_setup: bool = False) -> list[str]:
     """Return a list of human-readable problems, empty if all OK."""
     problems: list[str] = []
-    if not PROVISION_PY.is_file():
-        problems.append(t("err_no_provision", dir=str(REPO_DIR)))
-    if not ENV_EXAMPLE.is_file():
-        problems.append(t("err_no_envexample", dir=str(REPO_DIR)))
+    if not skip_setup:
+        if not PROVISION_PY.is_file():
+            problems.append(t("err_no_provision", dir=str(REPO_DIR)))
+        if not ENV_EXAMPLE.is_file():
+            problems.append(t("err_no_envexample", dir=str(REPO_DIR)))
+    else:
+        # In skip mode, .env must already exist (created by a previous run)
+        if not ENV_FILE.is_file():
+            problems.append(t("skip_no_env"))
     if not COMPOSE_FILE.is_file():
         problems.append(t("err_no_compose", dir=str(REPO_DIR)))
-    try:
-        subprocess.run(["docker", "--version"],
-                       capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    if not shutil.which("sudo"):
+        problems.append(t("err_no_sudo"))
+    if not shutil.which("docker"):
         problems.append(t("err_no_docker"))
     return problems
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="POS System Installation Wizard")
+    parser.add_argument(
+        "--skip-setup", action="store_true",
+        help="Skip provisioning (step 1) and Docker login (step 2), "
+             "jump directly to deployment.",
+    )
+    args = parser.parse_args()
+
     # Run a short prerequisite check before opening the GUI
-    problems = _check_prerequisites()
+    problems = _check_prerequisites(skip_setup=args.skip_setup)
 
     root = tk.Tk()
     root.withdraw()  # hide until ready
@@ -841,7 +984,7 @@ def main() -> None:
         sys.exit(1)
 
     root.deiconify()
-    InstallerApp(root)
+    InstallerApp(root, skip_setup=args.skip_setup)
     root.mainloop()
 
 

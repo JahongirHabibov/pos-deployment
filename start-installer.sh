@@ -4,7 +4,8 @@
 #
 # Usage:
 #   chmod +x start-installer.sh
-#   ./start-installer.sh
+#   ./start-installer.sh              # full 3-step wizard
+#   ./start-installer.sh --skip-setup # skip to deployment (steps 1 & 2 already done)
 #
 # What this script does:
 #   1. Verifies that Python 3.10+ is available
@@ -78,7 +79,7 @@ if ! "$PYTHON" -c "import tkinter" 2>/dev/null; then
 fi
 success "Tkinter verfügbar"
 
-# ── 3. Check installer.py exists ───────────────────────────────────── ─────────────────────────────────────────────
+# ── 3. Check installer.py exists ─────────────────────────────────────────────
 if [[ ! -f "$INSTALLER" ]]; then
     die "installer.py nicht gefunden in $SCRIPT_DIR"
 fi
@@ -88,4 +89,4 @@ echo ""
 info "Starte Installations-Assistent …"
 echo ""
 cd "$SCRIPT_DIR"
-exec "$PYTHON" "$INSTALLER"
+exec "$PYTHON" "$INSTALLER" "$@"
