@@ -11,6 +11,7 @@ No Docker or Linux knowledge required from the distributor.
 """
 
 import argparse
+import datetime
 import os
 import re
 import shutil
@@ -56,6 +57,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_next":           "Weiter →",
         "btn_install":        "Installieren",
         "btn_done":           "Fertig ✓",
+        "btn_cancel":         "Abbrechen",
         # ── Step 1
         "s1_title":           "Schritt 1 — Lizenzdaten & Image-Tags",
         "s1_desc":            (
@@ -134,6 +136,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_next":           "Next \u2192",
         "btn_install":        "Install",
         "btn_done":           "Done \u2713",
+        "btn_cancel":         "Cancel",
         # ── Step 1
         "s1_title":           "Step 1 \u2014 License Data & Image Tags",
         "s1_desc":            (
@@ -212,6 +215,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_next":           "\u0414\u0430\u043b\u0435\u0435 \u2192",
         "btn_install":        "\u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c",
         "btn_done":           "\u0413\u043e\u0442\u043e\u0432\u043e \u2713",
+        "btn_cancel":         "\u041e\u0442\u043c\u0435\u043d\u0430",
         # ── Step 1
         "s1_title":           "\u0428\u0430\u0433 1 \u2014 \u0414\u0430\u043d\u043d\u044b\u0435 \u043b\u0438\u0446\u0435\u043d\u0437\u0438\u0438 \u0438 \u0442\u0435\u0433\u0438 \u043e\u0431\u0440\u0430\u0437\u043e\u0432",
         "s1_desc":            (
@@ -367,6 +371,8 @@ class InstallerApp:
         self._data: dict[str, str] = {}
         self._current_step = 0
         self._skip_setup = skip_setup
+        self._deploy_log_file = None
+        self._deploy_proc = None
 
         self._build_chrome()
         self._show_step(2 if skip_setup else 0)
@@ -434,15 +440,28 @@ class InstallerApp:
         )
         self._btn_back.pack(side=tk.LEFT, padx=20)
 
+        self._nav_right = tk.Frame(nav, bg="white")
+        self._nav_right.pack(side=tk.RIGHT, padx=20)
+
         self._btn_next = tk.Button(
-            nav, text=t("btn_next"), width=18,
+            self._nav_right, text=t("btn_next"), width=18,
             bg=C_ACCENT, fg="white",
             activebackground="#3558e8",
             relief=tk.FLAT,
             font=("Segoe UI", 10, "bold"),
             command=self._next,
         )
-        self._btn_next.pack(side=tk.RIGHT, padx=20)
+        self._btn_next.pack(side=tk.RIGHT)
+
+        self._btn_cancel = tk.Button(
+            self._nav_right, text=t("btn_cancel"), width=14,
+            bg=C_DANGER, fg="white",
+            activebackground="#c0392b",
+            relief=tk.FLAT,
+            font=("Segoe UI", 10, "bold"),
+            command=self._cancel_deployment,
+        )
+        # Not packed initially — shown only while deployment is running
 
     def _switch_lang(self, code: str) -> None:
         """Change the active language and rebuild the UI — mirrors i18n.changeLanguage()."""
@@ -455,6 +474,7 @@ class InstallerApp:
         # Highlight the active language button
         for c, btn in self._lang_btns.items():
             btn.configure(bg=C_ACCENT if c == code else "#3a3a5c")
+        self._btn_cancel.configure(text=t("btn_cancel"))
         # Rebuild current step content + nav button labels
         self._show_step(self._current_step)
 
@@ -487,6 +507,13 @@ class InstallerApp:
 
         builders = [self._build_step1, self._build_step2, self._build_step3]
         builders[step]()
+
+        # Language buttons only active on step 1
+        for btn in self._lang_btns.values():
+            btn.configure(state=tk.NORMAL if step == 0 else tk.DISABLED)
+
+        # Cancel button managed by _run_step3; hide on any step transition
+        self._btn_cancel.pack_forget()
 
         # In skip mode, disable back button on step 3
         min_step = 2 if self._skip_setup else 0
@@ -529,6 +556,12 @@ class InstallerApp:
             widget.configure(state=tk.DISABLED)
 
         self.root.after(0, _append)
+        if self._deploy_log_file is not None:
+            try:
+                self._deploy_log_file.write(text + "\n")
+                self._deploy_log_file.flush()
+            except OSError:
+                pass
 
     def _set_nav(self, *, back: bool, next_: bool) -> None:
         """Enable/disable navigation buttons (thread-safe)."""
@@ -536,6 +569,13 @@ class InstallerApp:
             self._btn_back.configure(state=tk.NORMAL if back else tk.DISABLED)
             self._btn_next.configure(state=tk.NORMAL if next_ else tk.DISABLED)
         self.root.after(0, _do)
+
+    def _cancel_deployment(self) -> None:
+        proc = self._deploy_proc
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            self._log(self._s3_log, "⊘ Deployment abgebrochen.", C_DANGER)
+            self._set_nav(back=True, next_=True)
 
     # ── STEP 1 — Provisioning ─────────────────────────────────────────────────
 
@@ -876,70 +916,88 @@ class InstallerApp:
         self._btn_back.configure(state=tk.DISABLED)
 
         def task() -> None:
-            self._log(self._s3_log,
-                      "▶ sudo docker compose -f docker-compose.prod.yml up -d", "#7ec8e3")
-            self._log(self._s3_log, t("s3_log_pulling"), "#aaaaaa")
-
-            env = os.environ.copy()
-            _export_env_to_os_environ(env)
-
-            # Ensure updater-state directory exists for the updater sidecar
-            subprocess.run(["mkdir", "-p", str(REPO_DIR / "updater-state")], check=False)
-
-            sudo_password = self._data.get("sudo_password", "")
-            cmd = [
-                "sudo", "-k", "-S",
-                "docker", "compose",
-                "-f", str(COMPOSE_FILE),
-                "up", "-d",
-            ]
+            log_dir = REPO_DIR / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            self._deploy_log_file = (log_dir / f"deploy-{ts}.log").open(
+                "w", encoding="utf-8"
+            )
+            self.root.after(0, lambda: self._btn_cancel.pack(side=tk.LEFT, padx=(0, 8)))
             try:
-                proc = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    cwd=str(REPO_DIR),
-                    env=env,
-                )
-                assert proc.stdin is not None
-                proc.stdin.write(sudo_password + "\n")
-                proc.stdin.flush()
-                proc.stdin.close()
-            except FileNotFoundError:
-                self._log(self._s3_log, t("s3_no_docker"), C_DANGER)
-                self._set_nav(back=True, next_=False)
-                return
-
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                clean = line.rstrip()
-                if clean.startswith("[sudo]"):
-                    continue  # suppress sudo's password prompt
-                self._log(self._s3_log, clean)
-            proc.wait()
-
-            if proc.returncode == 0:
-                port = _read_env_keys(["POS_PUBLIC_PORT"]).get(
-                    "POS_PUBLIC_PORT", "80")
-                self._log(self._s3_log, "")
-                self._log(self._s3_log, t("s3_log_success"), C_SUCCESS)
                 self._log(self._s3_log,
-                          t("s3_log_url", port=port), "#7ec8e3")
+                          "▶ sudo docker compose -f docker-compose.prod.yml up -d", "#7ec8e3")
+                self._log(self._s3_log, t("s3_log_pulling"), "#aaaaaa")
 
-                def _finish():
-                    self._btn_next.configure(
-                        text=t("btn_done"),
-                        state=tk.NORMAL,
-                        bg=C_SUCCESS,
-                        command=self.root.destroy,
+                env = os.environ.copy()
+                _export_env_to_os_environ(env)
+
+                # Ensure updater-state directory exists for the updater sidecar
+                subprocess.run(["mkdir", "-p", str(REPO_DIR / "updater-state")], check=False)
+
+                sudo_password = self._data.get("sudo_password", "")
+                cmd = [
+                    "sudo", "-k", "-S",
+                    "docker", "compose",
+                    "-f", str(COMPOSE_FILE),
+                    "up", "-d",
+                ]
+                try:
+                    proc = subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        cwd=str(REPO_DIR),
+                        env=env,
                     )
-                self.root.after(0, _finish)
-            else:
-                self._log(self._s3_log, t("s3_log_fail"), C_DANGER)
-                self._log(self._s3_log, t("s3_log_tip"), "#aaaaaa")
-                self._set_nav(back=True, next_=True)
+                    self._deploy_proc = proc
+                    assert proc.stdin is not None
+                    proc.stdin.write(sudo_password + "\n")
+                    proc.stdin.flush()
+                    proc.stdin.close()
+                except FileNotFoundError:
+                    self._log(self._s3_log, t("s3_no_docker"), C_DANGER)
+                    self._set_nav(back=True, next_=False)
+                    return
+
+                assert proc.stdout is not None
+                for line in proc.stdout:
+                    clean = line.rstrip()
+                    if clean.startswith("[sudo]"):
+                        continue  # suppress sudo's password prompt
+                    self._log(self._s3_log, clean)
+                proc.wait()
+
+                if proc.returncode == 0:
+                    port = _read_env_keys(["POS_PUBLIC_PORT"]).get(
+                        "POS_PUBLIC_PORT", "80")
+                    self._log(self._s3_log, "")
+                    self._log(self._s3_log, t("s3_log_success"), C_SUCCESS)
+                    self._log(self._s3_log,
+                              t("s3_log_url", port=port), "#7ec8e3")
+
+                    def _finish():
+                        self._btn_next.configure(
+                            text=t("btn_done"),
+                            state=tk.NORMAL,
+                            bg=C_SUCCESS,
+                            command=self.root.destroy,
+                        )
+                    self.root.after(0, _finish)
+                else:
+                    self._log(self._s3_log, t("s3_log_fail"), C_DANGER)
+                    self._log(self._s3_log, t("s3_log_tip"), "#aaaaaa")
+                    self._set_nav(back=True, next_=True)
+            finally:
+                self.root.after(0, lambda: self._btn_cancel.pack_forget())
+                try:
+                    if self._deploy_log_file is not None:
+                        self._deploy_log_file.close()
+                except OSError:
+                    pass
+                self._deploy_log_file = None
+                self._deploy_proc = None
 
         threading.Thread(target=task, daemon=True).start()
 
