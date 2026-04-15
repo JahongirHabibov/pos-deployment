@@ -552,11 +552,13 @@ class InstallerApp:
         ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
         fields = [
-            ("otpk",          t("s1_lbl_otpk"),   False),
-            ("api_url",       t("s1_lbl_url"),     False),
-            ("image_backend", "IMAGE_BACKEND:",    False),
-            ("image_frontend","IMAGE_FRONTEND:",   False),
-            ("image_service", "IMAGE_IMAGE_SERVICE:", False),
+            ("otpk",            t("s1_lbl_otpk"),       False),
+            ("api_url",         t("s1_lbl_url"),        False),
+            ("image_backend",   "IMAGE_BACKEND:",       False),
+            ("image_frontend",  "IMAGE_FRONTEND:",      False),
+            ("image_service",   "IMAGE_IMAGE_SERVICE:", False),
+            ("image_updater",   "IMAGE_UPDATER:",       False),
+            ("deployment_repo", "DEPLOYMENT_REPO:",     False),
         ]
         self._s1_vars: dict[str, tk.StringVar] = {}
         for row, (key, label, secret) in enumerate(fields, start=2):
@@ -625,6 +627,8 @@ class InstallerApp:
                     "IMAGE_BACKEND":       vals["image_backend"],
                     "IMAGE_FRONTEND":      vals["image_frontend"],
                     "IMAGE_IMAGE_SERVICE": vals["image_service"],
+                    "IMAGE_UPDATER":       vals["image_updater"],
+                    "DEPLOYMENT_REPO":     vals["deployment_repo"],
                 })
                 self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
             except Exception as exc:  # noqa: BLE001
@@ -878,6 +882,9 @@ class InstallerApp:
 
             env = os.environ.copy()
             _export_env_to_os_environ(env)
+
+            # Ensure updater-state directory exists for the updater sidecar
+            subprocess.run(["mkdir", "-p", str(REPO_DIR / "updater-state")], check=False)
 
             sudo_password = self._data.get("sudo_password", "")
             cmd = [

@@ -130,6 +130,36 @@ services:
       start_period: 10s
     logging: *default-logging
 
+  # ===========================================================================
+  # UPDATER SIDECAR — System-Update über Admin-UI
+  # ===========================================================================
+  updater:
+    image: ${IMAGE_UPDATER}
+    container_name: pos-updater
+    hostname: pos-updater
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ./.env:/app/deployment/.env:rw
+      - ./docker-compose.prod.yml:/app/deployment/docker-compose.prod.yml:ro
+      - ./updater-state:/app/state
+    environment:
+      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-point-of-sale-prod}
+      - DEPLOYMENT_REPO=${DEPLOYMENT_REPO}
+      - MANAGED_SERVICES=backend,frontend,image-service
+      - DEPLOYMENT_ENV=/app/deployment/.env
+      - COMPOSE_FILE=/app/deployment/docker-compose.prod.yml
+    networks:
+      - pos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8200/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+    # KEIN ports: — Updater ist nur intern über pos-network erreichbar!
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
