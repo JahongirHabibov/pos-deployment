@@ -143,6 +143,8 @@ services:
       - ./.env:/app/deployment/.env:rw
       - ./docker-compose.prod.yml:/app/deployment/docker-compose.prod.yml:ro
       - ./updater-state:/app/state
+      - ~/.docker/config.json:/root/.docker/config.json:ro   # ← neu
+      - /var/run/docker.sock:/var/run/docker.sock:rw
     environment:
       - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-point-of-sale-prod}
       - DEPLOYMENT_REPO=${DEPLOYMENT_REPO}
