@@ -107,7 +107,7 @@ def write_env(
         # Replace existing KEY=... line (match KEY= at line start, any value after)
         new_content, count = re.subn(
             rf"^{re.escape(key)}=.*$",
-            f"{key}={value}",
+            lambda _m, k=key, v=value: f"{k}={v}",
             content,
             flags=re.MULTILINE,
         )

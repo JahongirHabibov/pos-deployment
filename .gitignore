@@ -18,4 +18,6 @@ Thumbs.db
 tmp-*
 logs/
 updater-state/
+backups/
 log-*
+data/*

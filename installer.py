@@ -11,13 +11,16 @@ No Docker or Linux knowledge required from the distributor.
 """
 
 import argparse
+import base64
 import datetime
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import threading
+import urllib.request
 from pathlib import Path
 
 import tkinter as tk
@@ -29,6 +32,8 @@ ENV_EXAMPLE     = REPO_DIR / ".env.example"
 ENV_FILE        = REPO_DIR / ".env"
 PROVISION_PY    = REPO_DIR / "provision.py"
 COMPOSE_FILE    = REPO_DIR / "docker-compose.prod.yml"
+LOCALES_DIR     = REPO_DIR / "locales"
+POS_AUTH_FILE   = Path.home() / ".docker" / "pos-auth.json"
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 C_BRAND     = "#1a1a2e"
@@ -38,6 +43,8 @@ C_DANGER    = "#dc3545"
 C_INFO      = "#0288d1"
 
 # ── i18n ──────────────────────────────────────────────────────────────────────
+# Translations are loaded from locales/<lang>.json at startup.
+# Each JSON file is plain UTF-8 — edit without Python knowledge.
 # Mirrors React i18next:
 #   TRANSLATIONS  ≈ per-locale JSON files       (one dict per language)
 #   _LANG         ≈ i18n.language               (currently active locale)
@@ -46,261 +53,118 @@ C_INFO      = "#0288d1"
 
 _LANG: str = "de"
 
-TRANSLATIONS: dict[str, dict[str, str]] = {
-    "de": {
-        # ── Chrome
-        "title":              "POS System  ·  Installations-Assistent",
-        "step1_tab":          "  1. Lizenzdaten  ",
-        "step2_tab":          "  2. Docker Login  ",
-        "step3_tab":          "  3. Deployment  ",
-        "btn_back":           "← Zurück",
-        "btn_next":           "Weiter →",
-        "btn_install":        "Installieren",
-        "btn_done":           "Fertig ✓",
-        "btn_cancel":         "Abbrechen",
-        # ── Step 1
-        "s1_title":           "Schritt 1 — Lizenzdaten & Image-Tags",
-        "s1_desc":            (
-            "Geben Sie den einmaligen Provisioning-Token (OTPK) und die Legisell-URL ein.\n"
-            "Die Image-Tags erhalten Sie zusammen mit dem OTPK vom Legisell-Owner."
-        ),
-        "s1_lbl_otpk":        "Provisioning Token (OTPK):",
-        "s1_lbl_url":         "Legisell Backend URL:",
-        "s1_lbl_output":      "Ausgabe:",
-        "s1_err_missing":     "Bitte alle Felder ausfüllen.",
-        "s1_log_connecting":  "Verbinde mit {url} \u2026",
-        "s1_log_fail":        "\u2717 Provisioning fehlgeschlagen. Bitte Token und URL prüfen.",
-        "s1_log_writing":     "Schreibe Image-Tags in .env \u2026",
-        "s1_log_tags_ok":     "\u2713 Image-Tags erfolgreich gesetzt.",
-        "s1_log_tags_err":    "\u2717 Fehler beim Schreiben der Image-Tags: {exc}",
-        "s1_log_done":        "\u2713 Provisioning abgeschlossen! Weiter zum nächsten Schritt.",
-        # ── Step 2
-        "s2_title":           "Schritt 2 — Docker Registry Login",
-        "s2_desc":            (
-            "Geben Sie die GHCR-Zugangsdaten ein, die Sie vom Legisell-Owner erhalten haben.\n"
-            "Diese werden benötigt, um die Docker-Images herunterzuladen."
-        ),
-        "s2_lbl_user":        "GHCR Benutzername:",
-        "s2_lbl_token":       "GHCR Token / PAT:",
-        "s2_show_token":      "Token anzeigen",
-        "s2_lbl_sudo":        "Sudo-Passwort:",
-        "s2_show_sudo":       "Passwort anzeigen",
-        "s2_err_missing":     "Bitte Benutzername, Token und Sudo-Passwort eingeben.",
-        "s2_connecting":      "Verbinde mit ghcr.io \u2026",
-        "s2_no_docker":       "\u2717 'docker' nicht gefunden. Ist Docker installiert?",
-        "s2_login_ok":        "\u2713 Login erfolgreich!",
-        "s2_login_fail":      "Login fehlgeschlagen.",
-        "s2_login_err":       "\u2717 Fehler: {msg}",
-        # ── Step 3
-        "s3_title":           "Schritt 3 — Zusammenfassung & Deployment",
-        "s3_sum_api_url":     "Legisell API URL",
-        "s3_sum_ghcr_user":   "GHCR Benutzername",
-        "s3_sum_app_name":    "App Name",
-        "s3_sum_port":        "Öffentlicher Port",
-        "s3_sum_db":          "Datenbank",
-        "s3_sum_secrets":     "Secrets",
-        "s3_secrets_set":     "\u25cf POSTGRES_PASSWORD  \u25cf REDIS_PASSWORD  \u25cf JWT_SECRET  [gesetzt \u2713]",
-        "s3_hint":            'Prüfen Sie die Angaben und klicken Sie auf "Installieren".',
-        "s3_lbl_log":         "Deployment-Log:",
-        "s3_log_pulling":     "  (Images werden heruntergeladen \u2014 das kann einige Minuten dauern \u2026)\n",
-        "s3_no_docker":       "\u2717 FEHLER: 'docker' nicht gefunden. Bitte Docker installieren.",
-        "s3_log_success":     "\u2713 Deployment erfolgreich abgeschlossen!",
-        "s3_log_url":         "  \u2192 System erreichbar unter: http://localhost:{port}",
-        "s3_log_fail":        "\n\u2717 Deployment fehlgeschlagen. Bitte den Log prüfen.",
-        "s3_log_tip":         "  Tipp: sudo docker compose -f docker-compose.prod.yml logs",
-        # ── Step 3 sudo
-        "s3_lbl_sudo":        "Sudo-Passwort:",
-        "s3_show_sudo":       "Passwort anzeigen",
-        "s3_err_no_sudo":     "Bitte das Sudo-Passwort eingeben.",
-        # ── Errors / dialogs
-        "err_title_missing":  "Fehlende Eingaben",
-        "err_prereq_title":   "Fehler beim Start",
-        "err_prereq_msg":     "Voraussetzungen nicht erfüllt:\n\n{items}",
-        "err_no_provision":   "provision.py nicht gefunden in {dir}",
-        "err_no_envexample":  ".env.example nicht gefunden in {dir}",
-        "err_no_compose":     "docker-compose.prod.yml nicht gefunden in {dir}",
-        "err_no_docker":      "Docker ist nicht installiert oder nicht im PATH.",
-        "err_no_sudo":        "sudo ist nicht installiert oder nicht im PATH.",
-        # ── Skip-setup mode
-        "skip_banner":        "⏭ Schritte 1 & 2 übersprungen (--skip-setup)",
-        "skip_no_env":        ".env nicht gefunden — bitte zuerst ohne --skip-setup ausführen.",
-        "skip_step_label":    "übersprungen",
-    },
-    "en": {
-        # ── Chrome
-        "title":              "POS System  ·  Installation Wizard",
-        "step1_tab":          "  1. License Data  ",
-        "step2_tab":          "  2. Docker Login  ",
-        "step3_tab":          "  3. Deployment  ",
-        "btn_back":           "\u2190 Back",
-        "btn_next":           "Next \u2192",
-        "btn_install":        "Install",
-        "btn_done":           "Done \u2713",
-        "btn_cancel":         "Cancel",
-        # ── Step 1
-        "s1_title":           "Step 1 \u2014 License Data & Image Tags",
-        "s1_desc":            (
-            "Enter the one-time provisioning token (OTPK) and the Legisell URL.\n"
-            "The image tags are provided by the Legisell owner together with the OTPK."
-        ),
-        "s1_lbl_otpk":        "Provisioning Token (OTPK):",
-        "s1_lbl_url":         "Legisell Backend URL:",
-        "s1_lbl_output":      "Output:",
-        "s1_err_missing":     "Please fill in all fields.",
-        "s1_log_connecting":  "Connecting to {url} \u2026",
-        "s1_log_fail":        "\u2717 Provisioning failed. Please check token and URL.",
-        "s1_log_writing":     "Writing image tags to .env \u2026",
-        "s1_log_tags_ok":     "\u2713 Image tags written successfully.",
-        "s1_log_tags_err":    "\u2717 Error writing image tags: {exc}",
-        "s1_log_done":        "\u2713 Provisioning complete! Proceed to the next step.",
-        # ── Step 2
-        "s2_title":           "Step 2 \u2014 Docker Registry Login",
-        "s2_desc":            (
-            "Enter the GHCR credentials provided by the Legisell owner.\n"
-            "These are required to pull the Docker images."
-        ),
-        "s2_lbl_user":        "GHCR Username:",
-        "s2_lbl_token":       "GHCR Token / PAT:",
-        "s2_show_token":      "Show token",
-        "s2_lbl_sudo":        "Sudo Password:",
-        "s2_show_sudo":       "Show password",
-        "s2_err_missing":     "Please enter username, token, and sudo password.",
-        "s2_connecting":      "Connecting to ghcr.io \u2026",
-        "s2_no_docker":       "\u2717 'docker' not found. Is Docker installed?",
-        "s2_login_ok":        "\u2713 Login successful!",
-        "s2_login_fail":      "Login failed.",
-        "s2_login_err":       "\u2717 Error: {msg}",
-        # ── Step 3
-        "s3_title":           "Step 3 \u2014 Summary & Deployment",
-        "s3_sum_api_url":     "Legisell API URL",
-        "s3_sum_ghcr_user":   "GHCR Username",
-        "s3_sum_app_name":    "App Name",
-        "s3_sum_port":        "Public Port",
-        "s3_sum_db":          "Database",
-        "s3_sum_secrets":     "Secrets",
-        "s3_secrets_set":     "\u25cf POSTGRES_PASSWORD  \u25cf REDIS_PASSWORD  \u25cf JWT_SECRET  [set \u2713]",
-        "s3_hint":            'Review your settings and click "Install".',
-        "s3_lbl_log":         "Deployment Log:",
-        "s3_log_pulling":     "  (Pulling images \u2014 this may take a few minutes \u2026)\n",
-        "s3_no_docker":       "\u2717 ERROR: 'docker' not found. Please install Docker.",
-        "s3_log_success":     "\u2713 Deployment completed successfully!",
-        "s3_log_url":         "  \u2192 System available at: http://localhost:{port}",
-        "s3_log_fail":        "\n\u2717 Deployment failed. Please check the log.",
-        "s3_log_tip":         "  Tip: sudo docker compose -f docker-compose.prod.yml logs",
-        # ── Step 3 sudo
-        "s3_lbl_sudo":        "Sudo Password:",
-        "s3_show_sudo":       "Show password",
-        "s3_err_no_sudo":     "Please enter the sudo password.",
-        # ── Errors / dialogs
-        "err_title_missing":  "Missing Input",
-        "err_prereq_title":   "Startup Error",
-        "err_prereq_msg":     "Prerequisites not met:\n\n{items}",
-        "err_no_provision":   "provision.py not found in {dir}",
-        "err_no_envexample":  ".env.example not found in {dir}",
-        "err_no_compose":     "docker-compose.prod.yml not found in {dir}",
-        "err_no_docker":      "Docker is not installed or not in PATH.",
-        "err_no_sudo":        "sudo is not installed or not in PATH.",
-        # ── Skip-setup mode
-        "skip_banner":        "⏭ Steps 1 & 2 skipped (--skip-setup)",
-        "skip_no_env":        ".env not found — please run once without --skip-setup first.",
-        "skip_step_label":    "skipped",
-    },
-    "ru": {
-        # ── Chrome
-        "title":              "POS System  \u00b7  \u041c\u0430\u0441\u0442\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438",
-        "step1_tab":          "  1. \u041b\u0438\u0446\u0435\u043d\u0437\u0438\u044f  ",
-        "step2_tab":          "  2. Docker Login  ",
-        "step3_tab":          "  3. \u0420\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435  ",
-        "btn_back":           "\u2190 \u041d\u0430\u0437\u0430\u0434",
-        "btn_next":           "\u0414\u0430\u043b\u0435\u0435 \u2192",
-        "btn_install":        "\u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c",
-        "btn_done":           "\u0413\u043e\u0442\u043e\u0432\u043e \u2713",
-        "btn_cancel":         "\u041e\u0442\u043c\u0435\u043d\u0430",
-        # ── Step 1
-        "s1_title":           "\u0428\u0430\u0433 1 \u2014 \u0414\u0430\u043d\u043d\u044b\u0435 \u043b\u0438\u0446\u0435\u043d\u0437\u0438\u0438 \u0438 \u0442\u0435\u0433\u0438 \u043e\u0431\u0440\u0430\u0437\u043e\u0432",
-        "s1_desc":            (
-            "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0434\u043d\u043e\u0440\u0430\u0437\u043e\u0432\u044b\u0439 \u0442\u043e\u043a\u0435\u043d (OTPK) \u0438 URL Legisell.\n"
-            "\u0422\u0435\u0433\u0438 \u043e\u0431\u0440\u0430\u0437\u043e\u0432 \u043f\u0440\u0435\u0434\u043e\u0441\u0442\u0430\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0435\u043c Legisell \u0432\u043c\u0435\u0441\u0442\u0435 \u0441 OTPK."
-        ),
-        "s1_lbl_otpk":        "\u0422\u043e\u043a\u0435\u043d (OTPK):",
-        "s1_lbl_url":         "URL Legisell Backend:",
-        "s1_lbl_output":      "\u0412\u044b\u0432\u043e\u0434:",
-        "s1_err_missing":     "\u041f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0432\u0441\u0435 \u043f\u043e\u043b\u044f.",
-        "s1_log_connecting":  "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a {url} \u2026",
-        "s1_log_fail":        "\u2717 \u041e\u0448\u0438\u0431\u043a\u0430 \u0438\u043d\u0438\u0446\u0438\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u0438. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0442\u043e\u043a\u0435\u043d \u0438 URL.",
-        "s1_log_writing":     "\u0417\u0430\u043f\u0438\u0441\u044c \u0442\u0435\u0433\u043e\u0432 \u043e\u0431\u0440\u0430\u0437\u043e\u0432 \u0432 .env \u2026",
-        "s1_log_tags_ok":     "\u2713 \u0422\u0435\u0433\u0438 \u043e\u0431\u0440\u0430\u0437\u043e\u0432 \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u044b.",
-        "s1_log_tags_err":    "\u2717 \u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0438\u0441\u0438 \u0442\u0435\u0433\u043e\u0432: {exc}",
-        "s1_log_done":        "\u2713 \u0418\u043d\u0438\u0446\u0438\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430! \u041f\u0435\u0440\u0435\u0445\u043e\u0434\u0438\u0442\u0435 \u043a \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u043c\u0443 \u0448\u0430\u0433\u0443.",
-        # ── Step 2
-        "s2_title":           "\u0428\u0430\u0433 2 \u2014 \u0412\u0445\u043e\u0434 \u0432 Docker Registry",
-        "s2_desc":            (
-            "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0443\u0447\u0451\u0442\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 GHCR, \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u043d\u044b\u0435 \u043e\u0442 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430 Legisell.\n"
-            "\u041e\u043d\u0438 \u043d\u0435\u043e\u0431\u0445\u043e\u0434\u0438\u043c\u044b \u0434\u043b\u044f \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 Docker-\u043e\u0431\u0440\u0430\u0437\u043e\u0432."
-        ),
-        "s2_lbl_user":        "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c GHCR:",
-        "s2_lbl_token":       "\u0422\u043e\u043a\u0435\u043d GHCR / PAT:",
-        "s2_show_token":      "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0442\u043e\u043a\u0435\u043d",
-        "s2_lbl_sudo":        "Sudo-\u043f\u0430\u0440\u043e\u043b\u044c:",
-        "s2_show_sudo":       "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c",
-        "s2_err_missing":     "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0438\u043c\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f, \u0442\u043e\u043a\u0435\u043d \u0438 sudo-\u043f\u0430\u0440\u043e\u043b\u044c.",
-        "s2_connecting":      "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a ghcr.io \u2026",
-        "s2_no_docker":       "\u2717 'docker' \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d. \u0423\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u043b\u0438 Docker?",
-        "s2_login_ok":        "\u2713 \u0412\u0445\u043e\u0434 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d \u0443\u0441\u043f\u0435\u0448\u043d\u043e!",
-        "s2_login_fail":      "\u041e\u0448\u0438\u0431\u043a\u0430 \u0432\u0445\u043e\u0434\u0430.",
-        "s2_login_err":       "\u2717 \u041e\u0448\u0438\u0431\u043a\u0430: {msg}",
-        # ── Step 3
-        "s3_title":           "\u0428\u0430\u0433 3 \u2014 \u0421\u0432\u043e\u0434\u043a\u0430 \u0438 \u0440\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435",
-        "s3_sum_api_url":     "URL Legisell API",
-        "s3_sum_ghcr_user":   "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c GHCR",
-        "s3_sum_app_name":    "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f",
-        "s3_sum_port":        "\u041f\u0443\u0431\u043b\u0438\u0447\u043d\u044b\u0439 \u043f\u043e\u0440\u0442",
-        "s3_sum_db":          "\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445",
-        "s3_sum_secrets":     "\u0421\u0435\u043a\u0440\u0435\u0442\u044b",
-        "s3_secrets_set":     "\u25cf POSTGRES_PASSWORD  \u25cf REDIS_PASSWORD  \u25cf JWT_SECRET  [\u0437\u0430\u0434\u0430\u043d\u043e \u2713]",
-        "s3_hint":            "\u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438 \u043d\u0430\u0436\u043c\u0438\u0442\u0435 \u00ab\u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c\u00bb.",
-        "s3_lbl_log":         "\u0416\u0443\u0440\u043d\u0430\u043b \u0440\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u044f:",
-        "s3_log_pulling":     "  (\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u043e\u0431\u0440\u0430\u0437\u043e\u0432 \u2014 \u044d\u0442\u043e \u043c\u043e\u0436\u0435\u0442 \u0437\u0430\u043d\u044f\u0442\u044c \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u043c\u0438\u043d\u0443\u0442 \u2026)\n",
-        "s3_no_docker":       "\u2717 \u041e\u0428\u0418\u0411\u041a\u0410: 'docker' \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d. \u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0435 Docker.",
-        "s3_log_success":     "\u2713 \u0420\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435 \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043e!",
-        "s3_log_url":         "  \u2192 \u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u043f\u043e \u0430\u0434\u0440\u0435\u0441\u0443: http://localhost:{port}",
-        "s3_log_fail":        "\n\u2717 \u0420\u0430\u0437\u0432\u0451\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435 \u043d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0436\u0443\u0440\u043d\u0430\u043b.",
-        "s3_log_tip":         "  \u0421\u043e\u0432\u0435\u0442: sudo docker compose -f docker-compose.prod.yml logs",
-        # ── Step 3 sudo
-        "s3_lbl_sudo":        "Sudo-\u043f\u0430\u0440\u043e\u043b\u044c:",
-        "s3_show_sudo":       "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c",
-        "s3_err_no_sudo":     "\u041f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u0432\u0432\u0435\u0434\u0438\u0442\u0435 sudo-\u043f\u0430\u0440\u043e\u043b\u044c.",
-        # ── Errors / dialogs
-        "err_title_missing":  "\u041d\u0435\u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435 \u043f\u043e\u043b\u044f",
-        "err_prereq_title":   "\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0443\u0441\u043a\u0430",
-        "err_prereq_msg":     "\u041f\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u044b:\n\n{items}",
-        "err_no_provision":   "provision.py \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 {dir}",
-        "err_no_envexample":  ".env.example \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 {dir}",
-        "err_no_compose":     "docker-compose.prod.yml \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 {dir}",
-        "err_no_docker":      "Docker \u043d\u0435 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u0438\u043b\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 PATH.",
-        "err_no_sudo":        "sudo \u043d\u0435 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u0438\u043b\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 PATH.",
-        # ── Skip-setup mode
-        "skip_banner":        "\u23ed \u0428\u0430\u0433\u0438 1 \u0438 2 \u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u044b (--skip-setup)",
-        "skip_no_env":        ".env \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u2014 \u0441\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u0435 \u0431\u0435\u0437 --skip-setup.",
-        "skip_step_label":    "\u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u043e",
-    },
-}
+
+def _load_translations() -> dict[str, dict[str, str]]:
+    """Read locales/*.json and return a merged TRANSLATIONS dict.
+
+    Missing files are silently skipped; t() returns the key as fallback.
+    """
+    result: dict[str, dict[str, str]] = {}
+    for lang in ("de", "en", "ru"):
+        p = LOCALES_DIR / f"{lang}.json"
+        if p.is_file():
+            try:
+                result[lang] = json.loads(p.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                result[lang] = {}
+        else:
+            result[lang] = {}
+    return result
+
+
+TRANSLATIONS: dict[str, dict[str, str]] = _load_translations()
 
 
 def t(key: str, **kwargs: str) -> str:
     """Look up *key* in the active locale, falling back to the key itself.
     Supports {param} placeholders via keyword arguments — same as React i18next
     interpolation: t("s3_log_url", port="8080")
+    Unknown kwargs are silently ignored (no KeyError / IndexError).
     """
-    text = TRANSLATIONS.get(_LANG, TRANSLATIONS["de"]).get(key, key)
-    return text.format(**kwargs) if kwargs else text
+    text = TRANSLATIONS.get(_LANG, TRANSLATIONS.get("de", {})).get(key, key)
+    if not kwargs:
+        return text
+    try:
+        return text.format(**kwargs)
+    except (KeyError, IndexError):
+        # Partial format: substitute only known placeholders
+        import string
+        known = {
+            field_name
+            for _, field_name, _, _ in string.Formatter().parse(text)
+            if field_name
+        }
+        return text.format(**{k: v for k, v in kwargs.items() if k in known})
 
 
 def set_lang(code: str) -> None:
     global _LANG
     _LANG = code
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _write_pos_auth_json(user: str, token: str) -> None:
+    """Write ~/.docker/pos-auth.json with base64 auth for ghcr.io.
+
+    This credential-bridge file is mounted into the updater container
+    as /root/.docker/config.json so it can pull images from GHCR
+    without needing access to docker-credential-desktop.exe.
+    """
+    POS_AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    auth_b64 = base64.b64encode(f"{user}:{token}".encode()).decode()
+    data = {"auths": {"ghcr.io": {"auth": auth_b64}}}
+    POS_AUTH_FILE.write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+    )
+    POS_AUTH_FILE.chmod(0o600)
+
+
+def _fetch_recent_tags(repo: str, n: int = 4) -> list[str]:
+    """Return the n most recent release/tag names for a public GitHub repo.
+
+    Tries the Releases API first (sorted by published date), then falls back
+    to the Tags API. Returns an empty list on any error.
+    """
+    for endpoint in (
+        f"https://api.github.com/repos/{repo}/releases?per_page={n}",
+        f"https://api.github.com/repos/{repo}/tags?per_page={n}",
+    ):
+        try:
+            req = urllib.request.Request(
+                endpoint,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode())
+            names = [r.get("tag_name") or r.get("name", "") for r in data[:n]]
+            names = [name for name in names if name]
+            if names:
+                return names
+        except Exception:  # noqa: BLE001
+            continue
+    return []
+
+
+def _has_ghcr_credentials() -> tuple[bool, str]:
+    """Check whether GHCR credentials are already stored in a Docker config file.
+
+    Inspects ~/.docker/pos-auth.json first, then ~/.docker/config.json.
+    Returns (found, human-readable source path).
+    Only plain ``auths`` entries are considered; credential-helper entries
+    are not decoded (no plain-text token available in that case).
+    """
+    for path in (POS_AUTH_FILE, Path.home() / ".docker" / "config.json"):
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if "ghcr.io" in data.get("auths", {}):
+                    return True, str(path)
+            except (json.JSONDecodeError, OSError):
+                pass
+    return False, ""
+
 
 def _read_env_keys(keys: list[str]) -> dict[str, str]:
     """Parse .env file and return a dict of requested key → value."""
@@ -327,7 +191,7 @@ def _patch_env_keys(mapping: dict[str, str]) -> None:
     for key, value in mapping.items():
         new_content, n = re.subn(
             rf"^{re.escape(key)}=.*$",
-            f"{key}={value}",
+            lambda _m, k=key, v=value: f"{k}={v}",
             content,
             flags=re.MULTILINE,
         )
@@ -369,6 +233,7 @@ class InstallerApp:
 
         # Shared state collected across steps
         self._data: dict[str, str] = {}
+        self._load_env_into_data()  # Idee 2: pre-fill from existing .env
         self._current_step = 0
         self._skip_setup = skip_setup
         self._deploy_log_file = None
@@ -376,6 +241,36 @@ class InstallerApp:
 
         self._build_chrome()
         self._show_step(2 if skip_setup else 0)
+
+    # ── Idee 2: Pre-fill from existing .env ────────────────────────────────────
+
+    def _load_env_into_data(self) -> None:
+        """Read values from an existing .env and store them in self._data.
+
+        Only fills keys that are not already set; never touches secrets that
+        are not persisted in .env (OTPK, sudo password, GHCR credentials).
+        """
+        if not ENV_FILE.is_file():
+            return
+        env_vals = _read_env_keys([
+            "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
+            "IMAGE_UPDATER", "IMAGE_BACKUP", "DEPLOYMENT_REPO",
+            "BACKUP_UI_USER", "BACKUP_UI_PASSWORD",
+        ])
+        mapping = {
+            "image_backend":      "IMAGE_BACKEND",
+            "image_frontend":     "IMAGE_FRONTEND",
+            "image_service":      "IMAGE_IMAGE_SERVICE",
+            "image_updater":      "IMAGE_UPDATER",
+            "image_backup":       "IMAGE_BACKUP",
+            "deployment_repo":    "DEPLOYMENT_REPO",
+            "backup_ui_user":     "BACKUP_UI_USER",
+            "backup_ui_password": "BACKUP_UI_PASSWORD",
+        }
+        for data_key, env_key in mapping.items():
+            value = env_vals.get(env_key, "")
+            if value:
+                self._data[data_key] = value
 
     # ── Chrome (header + step indicator + nav bar) ────────────────────────────
 
@@ -465,6 +360,8 @@ class InstallerApp:
 
     def _switch_lang(self, code: str) -> None:
         """Change the active language and rebuild the UI — mirrors i18n.changeLanguage()."""
+        # Persist any typed-but-not-submitted field values before destroying widgets.
+        self._save_step_state()
         set_lang(code)
         # Update static chrome labels
         self._hdr_lbl.configure(text=t("title"))
@@ -477,6 +374,51 @@ class InstallerApp:
         self._btn_cancel.configure(text=t("btn_cancel"))
         # Rebuild current step content + nav button labels
         self._show_step(self._current_step)
+
+    def _save_step_state(self) -> None:
+        """Snapshot currently displayed field values into self._data.
+
+        Called before any UI rebuild (language switch, back navigation) so that
+        typed-but-not-submitted values survive widget destruction.
+        """
+        if self._current_step == 0:
+            self._save_step1_state()
+        elif self._current_step == 1:
+            self._save_step2_state()
+        elif self._current_step == 2:
+            # Persist step-3 sudo field (only shown in --skip-setup mode)
+            if hasattr(self, "_s3_sudo_var") and self._s3_sudo_var is not None:
+                value = self._s3_sudo_var.get()
+                if value:
+                    self._data["sudo_password"] = value
+
+    def _save_step1_state(self) -> None:
+        if not hasattr(self, "_s1_vars"):
+            return
+        for key, var in self._s1_vars.items():
+            value = var.get()
+            if value:  # Only overwrite with non-empty so defaults survive
+                self._data[key] = value
+        if hasattr(self, "_s1_already_prov"):
+            self._data["_already_prov"] = "1" if self._s1_already_prov.get() else ""
+
+    def _save_step2_state(self) -> None:
+        for attr, data_key in (
+            ("_s2_user",        "ghcr_user"),
+            ("_s2_token",       "ghcr_token"),
+            ("_s2_sudo",        "sudo_password"),
+            ("_s2_backup_user", "backup_ui_user"),
+            ("_s2_backup_pass", "backup_ui_password"),
+        ):
+            if hasattr(self, attr):
+                value = getattr(self, attr).get()
+                if value:
+                    self._data[data_key] = value
+        if hasattr(self, "_s2_already_logged_in"):
+            self._data["_already_logged_in"] = (
+                "1" if self._s2_already_logged_in.get() else ""
+            )
+
 
     def _update_step_indicator(self) -> None:
         for i, lbl in enumerate(self._step_lbls):
@@ -529,6 +471,7 @@ class InstallerApp:
 
     def _back(self) -> None:
         if self._current_step > 0:
+            self._save_step_state()
             self._show_step(self._current_step - 1)
 
     def _next(self) -> None:
@@ -574,7 +517,7 @@ class InstallerApp:
         proc = self._deploy_proc
         if proc is not None and proc.poll() is None:
             proc.terminate()
-            self._log(self._s3_log, "⊘ Deployment abgebrochen.", C_DANGER)
+            self._log(self._s3_log, t("s3_log_cancelled"), C_DANGER)
             self._set_nav(back=True, next_=True)
 
     # ── STEP 1 — Provisioning ─────────────────────────────────────────────────
@@ -589,7 +532,31 @@ class InstallerApp:
             text=t("s1_desc"),
             bg="white", fg="#555", font=("Segoe UI", 9),
             justify=tk.LEFT,
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 14))
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+
+        # ── Idee 2: info banner when .env already exists ──────────────────
+        if ENV_FILE.is_file():
+            tk.Label(
+                c,
+                text=t("s1_env_prefilled"),
+                bg="#e8f5e9", fg="#2e7d32",
+                font=("Segoe UI", 9, "italic"),
+                anchor="w", padx=6, pady=3,
+                relief=tk.GROOVE, bd=1,
+            ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+
+        # ── Idee 1: "already provisioned" checkbox ────────────────────────
+        self._s1_already_prov = tk.BooleanVar(
+            value=bool(self._data.get("_already_prov"))
+        )
+        tk.Checkbutton(
+            c,
+            text=t("s1_chk_already_provisioned"),
+            variable=self._s1_already_prov,
+            command=self._toggle_provision_mode,
+            bg="white", font=("Segoe UI", 9),
+            anchor="w",
+        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
         fields = [
             ("otpk",            t("s1_lbl_otpk"),       False),
@@ -598,10 +565,13 @@ class InstallerApp:
             ("image_frontend",  "IMAGE_FRONTEND:",      False),
             ("image_service",   "IMAGE_IMAGE_SERVICE:", False),
             ("image_updater",   "IMAGE_UPDATER:",       False),
+            ("image_backup",    "IMAGE_BACKUP:",        False),
             ("deployment_repo", "DEPLOYMENT_REPO:",     False),
         ]
         self._s1_vars: dict[str, tk.StringVar] = {}
-        for row, (key, label, secret) in enumerate(fields, start=2):
+        self._s1_entry_otpk: tk.Entry | None = None
+        self._s1_entry_api_url: tk.Entry | None = None
+        for row, (key, label, secret) in enumerate(fields, start=4):
             tk.Label(c, text=label, bg="white", anchor="w",
                      font=("Segoe UI", 10), width=30).grid(
                 row=row, column=0, sticky="w", pady=4)
@@ -612,20 +582,131 @@ class InstallerApp:
                              relief=tk.SOLID, bd=1)
             entry.grid(row=row, column=1, sticky="w", padx=(8, 0), pady=4)
             self._s1_vars[key] = var
+            if key == "otpk":
+                self._s1_entry_otpk = entry
+            elif key == "api_url":
+                self._s1_entry_api_url = entry
+
+        # ── Recent-tags hint ──────────────────────────────────────────────
+        self._s1_tags_hint = tk.Label(
+            c, text="", bg="white", fg="#888",
+            font=("Segoe UI", 9, "italic"), anchor="w",
+        )
+        self._s1_tags_hint.grid(row=len(fields)+4, column=0, columnspan=3,
+                                sticky="w", pady=(6, 0))
+        self._s1_tags_fetch_after_id: str | None = None
+
+        def _on_repo_change(*_: object) -> None:
+            if self._s1_tags_fetch_after_id is not None:
+                self.root.after_cancel(self._s1_tags_fetch_after_id)
+            repo = self._s1_vars["deployment_repo"].get().strip()
+            if repo and "/" in repo:
+                self._s1_tags_hint.configure(
+                    text=t("s1_hint_fetching"), fg="#888")
+                self._s1_tags_fetch_after_id = self.root.after(
+                    800,
+                    lambda r=repo: threading.Thread(
+                        target=self._fetch_and_show_tags, args=(r,),
+                        daemon=True,
+                    ).start(),
+                )
+            else:
+                self._s1_tags_hint.configure(text="")
+
+        self._s1_vars["deployment_repo"].trace_add("write", _on_repo_change)
+        # Trigger immediately if a value is already present
+        _on_repo_change()
 
         tk.Label(c, text=t("s1_lbl_output"), bg="white",
                  font=("Segoe UI", 10, "bold")).grid(
-            row=len(fields)+2, column=0, columnspan=3,
+            row=len(fields)+5, column=0, columnspan=3,
             sticky="w", pady=(14, 2))
 
         self._s1_log = scrolledtext.ScrolledText(
             c, height=11, width=82, font=("Courier", 9),
             state=tk.DISABLED, bg="#fafafa", relief=tk.SOLID, bd=1)
-        self._s1_log.grid(row=len(fields)+3, column=0, columnspan=3)
+        self._s1_log.grid(row=len(fields)+6, column=0, columnspan=3)
         c.columnconfigure(1, weight=1)
+
+        # Apply initial toggle state (e.g. restored after language switch)
+        if self._s1_already_prov.get():
+            self._toggle_provision_mode()
+
+    def _toggle_provision_mode(self) -> None:
+        """Disable OTPK / api_url fields when 'already provisioned' is checked."""
+        already = self._s1_already_prov.get()
+        state = tk.DISABLED if already else tk.NORMAL
+        if self._s1_entry_otpk is not None:
+            self._s1_entry_otpk.configure(state=state)
+        if self._s1_entry_api_url is not None:
+            self._s1_entry_api_url.configure(state=state)
+
+    def _fetch_and_show_tags(self, repo: str) -> None:
+        """Background worker: fetch recent tags and update the hint label."""
+        tags = _fetch_recent_tags(repo, 4)
+
+        def _update() -> None:
+            if not hasattr(self, "_s1_tags_hint"):
+                return
+            try:
+                self._s1_tags_hint.winfo_exists()
+            except tk.TclError:
+                return
+            if tags:
+                hint = t("s1_recent_tags_label") + "  " + "  ·  ".join(tags)
+                self._s1_tags_hint.configure(text=hint, fg="#1565c0")
+            else:
+                self._s1_tags_hint.configure(
+                    text=t("s1_hint_fetch_err"), fg="#bbb")
+
+        self.root.after(0, _update)
 
     def _run_step1(self) -> None:
         vals = {k: v.get().strip() for k, v in self._s1_vars.items()}
+
+        # ── Idee 1: skip provisioning when checkbox is set ────────────────
+        if self._s1_already_prov.get():
+            if not ENV_FILE.is_file():
+                messagebox.showerror(t("err_title_missing"),
+                                     t("s1_err_no_env_for_skip"))
+                return
+
+            # Only patch IMAGE_* / DEPLOYMENT_REPO fields that were filled in
+            env_key_map = {
+                "image_backend":   "IMAGE_BACKEND",
+                "image_frontend":  "IMAGE_FRONTEND",
+                "image_service":   "IMAGE_IMAGE_SERVICE",
+                "image_updater":   "IMAGE_UPDATER",
+                "image_backup":    "IMAGE_BACKUP",
+                "deployment_repo": "DEPLOYMENT_REPO",
+            }
+            patch = {
+                env_key: vals[field_key]
+                for field_key, env_key in env_key_map.items()
+                if vals.get(field_key)
+            }
+            self._data.update({k: v for k, v in vals.items() if v})
+            self._btn_next.configure(state=tk.DISABLED)
+            self._btn_back.configure(state=tk.DISABLED)
+
+            def task_skip() -> None:
+                self._log(self._s1_log, t("s1_log_skip_provision"), C_INFO)
+                if patch:
+                    try:
+                        _patch_env_keys(patch)
+                        self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
+                    except Exception as exc:  # noqa: BLE001
+                        self._log(self._s1_log,
+                                  t("s1_log_tags_err", exc=str(exc)), C_DANGER)
+                        self._set_nav(back=False, next_=True)
+                        return
+                self._log(self._s1_log, t("s1_log_done"), C_SUCCESS)
+                self.root.after(600, lambda: self._show_step(1))
+
+            threading.Thread(target=task_skip, daemon=True).start()
+            return
+
+        # ── Normal provisioning path ──────────────────────────────────────
         missing = [k for k, v in vals.items() if not v]
         if missing:
             messagebox.showerror(t("err_title_missing"), t("s1_err_missing"))
@@ -668,6 +749,7 @@ class InstallerApp:
                     "IMAGE_FRONTEND":      vals["image_frontend"],
                     "IMAGE_IMAGE_SERVICE": vals["image_service"],
                     "IMAGE_UPDATER":       vals["image_updater"],
+                    "IMAGE_BACKUP":        vals["image_backup"],
                     "DEPLOYMENT_REPO":     vals["deployment_repo"],
                 })
                 self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
@@ -693,56 +775,138 @@ class InstallerApp:
             c,
             text=t("s2_desc"),
             bg="white", fg="#555", font=("Segoe UI", 9),
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 20))
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+
+        # ── auto-detect existing GHCR credentials ─────────────────────────
+        creds_found, creds_source = _has_ghcr_credentials()
+        if creds_found:
+            tk.Label(
+                c,
+                text=t("s2_creds_found", source=creds_source),
+                bg="#e8f5e9", fg="#2e7d32",
+                font=("Segoe UI", 9, "italic"),
+                anchor="w", padx=6, pady=3,
+                relief=tk.GROOVE, bd=1,
+            ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 4))
+
+        # ── "already logged in" checkbox ───────────────────────────────────
+        if "_already_logged_in" in self._data:
+            initial_skip = bool(self._data["_already_logged_in"])
+        else:
+            initial_skip = creds_found
+        self._s2_already_logged_in = tk.BooleanVar(value=initial_skip)
+        tk.Checkbutton(
+            c,
+            text=t("s2_chk_already_logged_in"),
+            variable=self._s2_already_logged_in,
+            command=self._toggle_login_mode,
+            bg="white", font=("Segoe UI", 9),
+            anchor="w",
+        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
         tk.Label(c, text=t("s2_lbl_user"), bg="white",
                  font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=2, column=0, sticky="w", pady=8)
+            row=4, column=0, sticky="w", pady=8)
         self._s2_user = tk.StringVar(value=self._data.get("ghcr_user", ""))
-        tk.Entry(c, textvariable=self._s2_user, width=44,
-                 font=("Segoe UI", 10), relief=tk.SOLID, bd=1).grid(
-            row=2, column=1, sticky="w", padx=(8, 0))
+        self._s2_user_entry = tk.Entry(
+            c, textvariable=self._s2_user, width=44,
+            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
+        self._s2_user_entry.grid(row=4, column=1, sticky="w", padx=(8, 0))
 
         tk.Label(c, text=t("s2_lbl_token"), bg="white",
                  font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=3, column=0, sticky="w", pady=8)
+            row=5, column=0, sticky="w", pady=8)
         self._s2_token = tk.StringVar(value=self._data.get("ghcr_token", ""))
         self._s2_token_entry = tk.Entry(
             c, textvariable=self._s2_token, width=44, show="*",
             font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-        self._s2_token_entry.grid(row=3, column=1, sticky="w", padx=(8, 0))
+        self._s2_token_entry.grid(row=5, column=1, sticky="w", padx=(8, 0))
 
         self._s2_show_token = tk.BooleanVar(value=False)
-        tk.Checkbutton(
+        self._s2_show_token_btn = tk.Checkbutton(
             c, text=t("s2_show_token"),
             variable=self._s2_show_token,
             command=self._toggle_token_visibility,
             bg="white", font=("Segoe UI", 9),
-        ).grid(row=4, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
+        )
+        self._s2_show_token_btn.grid(row=6, column=1, sticky="w",
+                                     padx=(8, 0), pady=(2, 0))
 
         tk.Label(c, text=t("s2_lbl_sudo"), bg="white",
                  font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=5, column=0, sticky="w", pady=8)
+            row=7, column=0, sticky="w", pady=8)
         self._s2_sudo = tk.StringVar(value=self._data.get("sudo_password", ""))
         self._s2_sudo_entry = tk.Entry(
             c, textvariable=self._s2_sudo, width=44, show="*",
             font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-        self._s2_sudo_entry.grid(row=5, column=1, sticky="w", padx=(8, 0))
+        self._s2_sudo_entry.grid(row=7, column=1, sticky="w", padx=(8, 0))
 
         self._s2_show_sudo = tk.BooleanVar(value=False)
-        tk.Checkbutton(
+        self._s2_show_sudo_btn = tk.Checkbutton(
             c, text=t("s2_show_sudo"),
             variable=self._s2_show_sudo,
             command=self._toggle_sudo_visibility,
             bg="white", font=("Segoe UI", 9),
-        ).grid(row=6, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
+        )
+        self._s2_show_sudo_btn.grid(row=8, column=1, sticky="w",
+                                    padx=(8, 0), pady=(2, 0))
+
+        tk.Label(c, text=t("s2_backup_section"),
+                 bg="white", fg="#888", font=("Segoe UI", 9, "italic"),
+                 anchor="w").grid(row=9, column=0, columnspan=3,
+                                  sticky="w", pady=(16, 4))
+
+        tk.Label(c, text=t("s2_lbl_backup_user"), bg="white",
+                 font=("Segoe UI", 10), width=26, anchor="w").grid(
+            row=10, column=0, sticky="w", pady=8)
+        self._s2_backup_user = tk.StringVar(
+            value=self._data.get("backup_ui_user", "admin"))
+        tk.Entry(c, textvariable=self._s2_backup_user, width=44,
+                 font=("Segoe UI", 10), relief=tk.SOLID, bd=1).grid(
+            row=10, column=1, sticky="w", padx=(8, 0))
+
+        tk.Label(c, text=t("s2_lbl_backup_pass"), bg="white",
+                 font=("Segoe UI", 10), width=26, anchor="w").grid(
+            row=11, column=0, sticky="w", pady=8)
+        self._s2_backup_pass = tk.StringVar(
+            value=self._data.get("backup_ui_password", ""))
+        self._s2_backup_pass_entry = tk.Entry(
+            c, textvariable=self._s2_backup_pass, width=44, show="*",
+            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
+        self._s2_backup_pass_entry.grid(row=11, column=1, sticky="w",
+                                        padx=(8, 0))
+
+        self._s2_show_backup_pass = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            c, text=t("s2_show_backup_pass"),
+            variable=self._s2_show_backup_pass,
+            command=self._toggle_backup_pass_visibility,
+            bg="white", font=("Segoe UI", 9),
+        ).grid(row=12, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
 
         self._s2_status = tk.Label(
             c, text="", bg="white", font=("Segoe UI", 10),
             wraplength=720, justify=tk.LEFT)
-        self._s2_status.grid(row=8, column=0, columnspan=3,
+        self._s2_status.grid(row=14, column=0, columnspan=3,
                               sticky="w", pady=(24, 0))
         c.columnconfigure(1, weight=1)
+
+        # Apply initial toggle state
+        if self._s2_already_logged_in.get():
+            self._toggle_login_mode()
+
+    def _toggle_login_mode(self) -> None:
+        """Disable GHCR user/token/sudo fields when 'already logged in' is checked."""
+        skip = self._s2_already_logged_in.get()
+        state = tk.DISABLED if skip else tk.NORMAL
+        for widget in (
+            self._s2_user_entry,
+            self._s2_token_entry,
+            self._s2_sudo_entry,
+            self._s2_show_token_btn,
+            self._s2_show_sudo_btn,
+        ):
+            widget.configure(state=state)
 
     def _toggle_token_visibility(self) -> None:
         self._s2_token_entry.configure(
@@ -754,6 +918,11 @@ class InstallerApp:
             show="" if self._s2_show_sudo.get() else "*"
         )
 
+    def _toggle_backup_pass_visibility(self) -> None:
+        self._s2_backup_pass_entry.configure(
+            show="" if self._s2_show_backup_pass.get() else "*"
+        )
+
     def _toggle_step3_sudo_visibility(self) -> None:
         if self._s3_sudo_entry is not None:
             self._s3_sudo_entry.configure(
@@ -761,16 +930,62 @@ class InstallerApp:
             )
 
     def _run_step2(self) -> None:
-        user         = self._s2_user.get().strip()
-        token        = self._s2_token.get().strip()
+        backup_user = self._s2_backup_user.get().strip() or "admin"
+        backup_pass = self._s2_backup_pass.get()
+
+        # ── skip-login path ───────────────────────────────────────────────
+        if self._s2_already_logged_in.get():
+            found, _ = _has_ghcr_credentials()
+            if not found:
+                messagebox.showerror(t("err_title_missing"),
+                                     t("s2_err_no_creds_for_skip"))
+                return
+            if not backup_pass:
+                messagebox.showerror(t("err_title_missing"),
+                                     t("s2_err_backup_pass"))
+                return
+            self._data["backup_ui_user"]     = backup_user
+            self._data["backup_ui_password"] = backup_pass
+            self._btn_next.configure(state=tk.DISABLED)
+            self._btn_back.configure(state=tk.DISABLED)
+            self.root.after(0, lambda: self._s2_status.configure(
+                text=t("s2_log_skip_login"), fg=C_INFO))
+
+            def task_skip() -> None:
+                try:
+                    _patch_env_keys({
+                        "BACKUP_UI_USER":     backup_user,
+                        "BACKUP_UI_PASSWORD": backup_pass,
+                    })
+                except OSError as exc:
+                    err_msg = f"\u2717 .env schreiben fehlgeschlagen: {exc}"
+                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
+                        text=m, fg=C_DANGER))
+                    self._set_nav(back=True, next_=True)
+                    return
+                self.root.after(0, lambda: self._s2_status.configure(
+                    text=t("s2_login_ok"), fg=C_SUCCESS))
+                self.root.after(600, lambda: self._show_step(2))
+
+            threading.Thread(target=task_skip, daemon=True).start()
+            return
+
+        # ── normal login path ─────────────────────────────────────────────
+        user          = self._s2_user.get().strip()
+        token         = self._s2_token.get().strip()
         sudo_password = self._s2_sudo.get()
         if not user or not token or not sudo_password:
             messagebox.showerror(t("err_title_missing"), t("s2_err_missing"))
             return
+        if not backup_pass:
+            messagebox.showerror(t("err_title_missing"), t("s2_err_backup_pass"))
+            return
 
-        self._data["ghcr_user"]      = user
-        self._data["ghcr_token"]     = token
-        self._data["sudo_password"]  = sudo_password
+        self._data["ghcr_user"]          = user
+        self._data["ghcr_token"]         = token
+        self._data["sudo_password"]      = sudo_password
+        self._data["backup_ui_user"]     = backup_user
+        self._data["backup_ui_password"] = backup_pass
         self._btn_next.configure(state=tk.DISABLED)
         self._btn_back.configure(state=tk.DISABLED)
         self.root.after(0, lambda: self._s2_status.configure(
@@ -798,6 +1013,25 @@ class InstallerApp:
             success  = result.returncode == 0
 
             if success:
+                try:
+                    _patch_env_keys({
+                        "BACKUP_UI_USER":     backup_user,
+                        "BACKUP_UI_PASSWORD": backup_pass,
+                    })
+                except OSError as exc:
+                    err_msg = f"\u2717 .env schreiben fehlgeschlagen: {exc}"
+                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
+                        text=m, fg=C_DANGER))
+                    self._set_nav(back=True, next_=True)
+                    return
+                try:
+                    _write_pos_auth_json(user, token)
+                except OSError as exc:
+                    err_msg = t("s2_auth_file_err", exc=str(exc))
+                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
+                        text=m, fg=C_DANGER))
+                    self._set_nav(back=True, next_=True)
+                    return
                 self.root.after(0, lambda: self._s2_status.configure(
                     text=t("s2_login_ok"), fg=C_SUCCESS))
                 self.root.after(600, lambda: self._show_step(2))
@@ -833,7 +1067,7 @@ class InstallerApp:
         env = _read_env_keys([
             "APP_NAME", "POS_PUBLIC_PORT",
             "POSTGRES_DB", "POSTGRES_SERVER",
-            "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
+            "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE", "IMAGE_BACKUP",
         ])
 
         summary = [
@@ -845,6 +1079,7 @@ class InstallerApp:
             ("IMAGE_BACKEND",        env.get("IMAGE_BACKEND", "—")),
             ("IMAGE_FRONTEND",       env.get("IMAGE_FRONTEND", "—")),
             ("IMAGE_IMAGE_SERVICE",  env.get("IMAGE_IMAGE_SERVICE", "—")),
+            ("IMAGE_BACKUP",         env.get("IMAGE_BACKUP", "—")),
             (t("s3_sum_secrets"),    t("s3_secrets_set")),
         ]
 
@@ -924,52 +1159,106 @@ class InstallerApp:
             )
             self.root.after(0, lambda: self._btn_cancel.pack(side=tk.LEFT, padx=(0, 8)))
             try:
-                self._log(self._s3_log,
-                          "▶ sudo docker compose -f docker-compose.prod.yml up -d", "#7ec8e3")
-                self._log(self._s3_log, t("s3_log_pulling"), "#aaaaaa")
-
                 env = os.environ.copy()
                 _export_env_to_os_environ(env)
 
-                # Ensure updater-state directory exists for the updater sidecar
+                # Ensure required host directories exist for bind mounts
                 subprocess.run(["mkdir", "-p", str(REPO_DIR / "updater-state")], check=False)
+                subprocess.run(["mkdir", "-p", str(REPO_DIR / "backups")], check=False)
 
                 sudo_password = self._data.get("sudo_password", "")
-                cmd = [
-                    "sudo", "-k", "-S",
-                    "docker", "compose",
-                    "-f", str(COMPOSE_FILE),
-                    "up", "-d",
-                ]
-                try:
-                    proc = subprocess.Popen(
-                        cmd,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        cwd=str(REPO_DIR),
-                        env=env,
-                    )
-                    self._deploy_proc = proc
-                    assert proc.stdin is not None
-                    proc.stdin.write(sudo_password + "\n")
-                    proc.stdin.flush()
-                    proc.stdin.close()
-                except FileNotFoundError:
-                    self._log(self._s3_log, t("s3_no_docker"), C_DANGER)
-                    self._set_nav(back=True, next_=False)
+
+                def _run_compose(subcmd: list[str]) -> "subprocess.Popen[str] | None":
+                    """Run `sudo docker compose -f <file> *subcmd` with live log output.
+
+                    Returns the finished Popen object, or None if docker was not found.
+                    Streams stdout/stderr to the log widget and suppresses the sudo
+                    password prompt line.
+                    """
+                    cmd = ["sudo", "-k", "-S", "docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
+                    try:
+                        p = subprocess.Popen(
+                            cmd,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            cwd=str(REPO_DIR),
+                            env=env,
+                        )
+                    except FileNotFoundError:
+                        self._log(self._s3_log, t("s3_no_docker"), C_DANGER)
+                        self._set_nav(back=True, next_=False)
+                        return None
+                    self._deploy_proc = p
+                    assert p.stdin is not None
+                    p.stdin.write(sudo_password + "\n")
+                    p.stdin.flush()
+                    p.stdin.close()
+                    assert p.stdout is not None
+                    for line in p.stdout:
+                        clean = line.rstrip()
+                        if clean.startswith("[sudo]"):
+                            continue  # suppress sudo's password prompt
+                        self._log(self._s3_log, clean)
+                    p.wait()
+                    return p
+
+                # ── Step 0: Ensure the shared Docker network exists ───────
+                # pos-network is declared external: true in the Compose file so
+                # Compose never manages its lifecycle.  We create it here once;
+                # the call is idempotent — if the network already exists the
+                # daemon returns an error that we deliberately ignore.
+                self._log(self._s3_log,
+                          "▶ sudo docker network create pos-network", "#7ec8e3")
+                net_proc = subprocess.run(
+                    ["sudo", "-k", "-S", "docker", "network", "create",
+                     "--driver", "bridge", "pos-network"],
+                    input=sudo_password + "\n",
+                    text=True,
+                    capture_output=True,
+                    cwd=str(REPO_DIR),
+                    env=env,
+                )
+                # Exit code 1 with "already exists" is expected on re-installs.
+                if net_proc.returncode == 0:
+                    self._log(self._s3_log, "  Network pos-network created.", "#aaaaaa")
+                else:
+                    err = (net_proc.stderr or "").strip()
+                    if "already exists" in err:
+                        self._log(self._s3_log, "  Network pos-network already exists — OK.", "#aaaaaa")
+                    else:
+                        self._log(self._s3_log, f"  Warning: {err}", C_DANGER)
+
+                # ── Step 1: Pull latest images ────────────────────────────
+                self._log(self._s3_log, "")
+                self._log(self._s3_log,
+                          "▶ sudo docker compose -f docker-compose.prod.yml pull", "#7ec8e3")
+                self._log(self._s3_log, t("s3_log_pulling"), "#aaaaaa")
+
+                pull_proc = _run_compose(["pull"])
+                if pull_proc is None:
+                    return
+                if pull_proc.returncode != 0:
+                    # returncode < 0 means killed by signal (user clicked Cancel) —
+                    # _cancel_deployment() already logged the abort message and
+                    # re-enabled nav buttons, so we only act on genuine failures.
+                    if pull_proc.returncode > 0:
+                        self._log(self._s3_log, t("s3_log_pull_fail"), C_DANGER)
+                        self._log(self._s3_log, t("s3_log_tip"), "#aaaaaa")
+                        self._set_nav(back=True, next_=True)
                     return
 
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    clean = line.rstrip()
-                    if clean.startswith("[sudo]"):
-                        continue  # suppress sudo's password prompt
-                    self._log(self._s3_log, clean)
-                proc.wait()
+                # ── Step 2: Start / recreate services ─────────────────────
+                self._log(self._s3_log, "")
+                self._log(self._s3_log,
+                          "▶ sudo docker compose -f docker-compose.prod.yml up -d", "#7ec8e3")
 
-                if proc.returncode == 0:
+                up_proc = _run_compose(["up", "-d"])
+                if up_proc is None:
+                    return
+
+                if up_proc.returncode == 0:
                     port = _read_env_keys(["POS_PUBLIC_PORT"]).get(
                         "POS_PUBLIC_PORT", "80")
                     self._log(self._s3_log, "")
@@ -985,7 +1274,8 @@ class InstallerApp:
                             command=self.root.destroy,
                         )
                     self.root.after(0, _finish)
-                else:
+                elif up_proc.returncode > 0:
+                    # Genuine failure (not user-cancelled)
                     self._log(self._s3_log, t("s3_log_fail"), C_DANGER)
                     self._log(self._s3_log, t("s3_log_tip"), "#aaaaaa")
                     self._set_nav(back=True, next_=True)
@@ -1009,6 +1299,9 @@ class InstallerApp:
 def _check_prerequisites(*, skip_setup: bool = False) -> list[str]:
     """Return a list of human-readable problems, empty if all OK."""
     problems: list[str] = []
+    for lang in ("de", "en", "ru"):
+        if not (LOCALES_DIR / f"{lang}.json").is_file():
+            problems.append(f"Locale file missing: locales/{lang}.json")
     if not skip_setup:
         if not PROVISION_PY.is_file():
             problems.append(t("err_no_provision", dir=str(REPO_DIR)))

@@ -4,6 +4,33 @@ This guide walks through deploying the Point of Sale system on a customer server
 
 ---
 
+## Graphical Installation Wizard (`installer.py`)
+
+For distributors and resellers, a guided GUI wizard is available that covers all deployment steps without requiring Docker or Linux knowledge.
+
+```bash
+python3 installer.py
+```
+
+**Step 1 — License Data & Image Tags**
+
+- Enter the one-time provisioning token (OTPK) and the Legisell backend URL to fetch secrets automatically.
+- **Pre-fill from existing `.env`**: If a `.env` file is already present (e.g. on a reinstall or update), all image tag fields are filled in automatically. An info banner is shown at the top of Step 1.
+- **"Credentials were already fetched from Legisell" checkbox**: Check this on subsequent runs to skip the provisioning API call entirely. The OTPK and URL fields are disabled; only image tag fields that were changed are patched into the existing `.env`. Requires an existing `.env`.
+
+**Step 2 — Docker Registry Login**
+
+- Authenticate with GHCR using the provided username and token.
+- Backup UI credentials are pre-filled from `.env` if available.
+
+**Step 3 — Deployment**
+
+- Review the summary and launch the stack with a single click.
+
+> To skip Steps 1 & 2 (e.g. for a quick re-deploy), use `python3 installer.py --skip-setup`.
+
+---
+
 ## Prerequisites
 
 - Linux server with **Docker** and **Docker Compose** installed

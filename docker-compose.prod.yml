@@ -107,6 +107,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      image-service:
+        condition: service_healthy
     logging: *default-logging
 
   # ===========================================================================
@@ -143,8 +145,7 @@ services:
       - ./.env:/app/deployment/.env:rw
       - ./docker-compose.prod.yml:/app/deployment/docker-compose.prod.yml:ro
       - ./updater-state:/app/state
-      - ~/.docker/config.json:/root/.docker/config.json:ro   # ← neu
-      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ~/.docker/pos-auth.json:/root/.docker/config.json:ro
     environment:
       - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-point-of-sale-prod}
       - DEPLOYMENT_REPO=${DEPLOYMENT_REPO}
@@ -162,6 +163,32 @@ services:
     logging: *default-logging
     # KEIN ports: — Updater ist nur intern über pos-network erreichbar!
 
+  # ===========================================================================
+  # BACKUP SIDECAR — Automatische PostgreSQL-Dumps + Web-UI (Port 8300)
+  # ===========================================================================
+  backup:
+    image: ${IMAGE_BACKUP}
+    container_name: pos-backup
+    hostname: pos-backup
+    env_file: .env
+    ports:
+      - "8300:8300"
+    volumes:
+      - ./backups:/backups
+    networks:
+      - pos-network
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8300/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
@@ -178,5 +205,10 @@ volumes:
 # =============================================================================
 networks:
   pos-network:
-    driver: bridge
+    # External: das Netzwerk wird einmalig außerhalb dieses Compose-Projekts
+    # erstellt (z. B. via `docker network create pos-network` im Installer).
+    # Compose verwaltet den Lifecycle *nicht* — kein Löschen/Neuerstellen beim
+    # `up` oder `down`. Andere Container (z. B. pos-printer-sim) können dauerhaft
+    # verbunden bleiben, ohne das Deployment zu blockieren.
+    external: true
     name: pos-network
