@@ -81,5 +81,7 @@
   "s1_err_no_env_for_skip": "Keine .env gefunden. Bitte zuerst ohne Häkchen ausführen, um das Provisioning durchzuführen.",
   "s1_recent_tags_label": "Letzte Versionen auf GHCR:",
   "s1_hint_fetching": "Lade letzte Versionen …",
-  "s1_hint_fetch_err": "Versionen konnten nicht abgerufen werden."
+  "s1_hint_fetch_err": "Versionen konnten nicht abgerufen werden.",
+  "s1_lbl_tz": "Zeitzone (TZ):",
+  "s2_backup_pass_provisioned": "ℹ Passwort wurde über Legisell Provisioning gesetzt und vorausgefüllt."
 }

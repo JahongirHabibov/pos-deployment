@@ -24,7 +24,31 @@ import urllib.request
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import messagebox, scrolledtext
+from tkinter import messagebox, scrolledtext, ttk
+
+# ── Timezone list (IANA) ─────────────────────────────────────────────────────
+try:
+    from zoneinfo import available_timezones as _tz_available
+    _TIMEZONES: list[str] = sorted(_tz_available())
+except ImportError:  # Python < 3.9 or tzdata not installed
+    _TIMEZONES = [
+        "Africa/Cairo", "Africa/Johannesburg",
+        "America/Chicago", "America/Denver", "America/Los_Angeles",
+        "America/New_York", "America/Sao_Paulo", "America/Toronto",
+        "Asia/Dubai", "Asia/Hong_Kong", "Asia/Kolkata", "Asia/Seoul",
+        "Asia/Shanghai", "Asia/Singapore", "Asia/Tokyo",
+        "Australia/Sydney",
+        "Europe/Amsterdam", "Europe/Athens", "Europe/Berlin",
+        "Europe/Brussels", "Europe/Budapest", "Europe/Copenhagen",
+        "Europe/Dublin", "Europe/Helsinki", "Europe/Istanbul",
+        "Europe/Kiev", "Europe/Lisbon", "Europe/London",
+        "Europe/Madrid", "Europe/Moscow", "Europe/Oslo",
+        "Europe/Paris", "Europe/Prague", "Europe/Rome",
+        "Europe/Sofia", "Europe/Stockholm", "Europe/Vienna",
+        "Europe/Warsaw", "Europe/Zurich",
+        "Pacific/Auckland", "Pacific/Honolulu",
+        "UTC",
+    ]
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_DIR        = Path(__file__).parent.resolve()
@@ -255,7 +279,7 @@ class InstallerApp:
         env_vals = _read_env_keys([
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
             "IMAGE_UPDATER", "IMAGE_BACKUP", "DEPLOYMENT_REPO",
-            "BACKUP_UI_USER", "BACKUP_UI_PASSWORD",
+            "BACKUP_UI_USER", "BACKUP_UI_PASSWORD", "TZ",
         ])
         mapping = {
             "image_backend":      "IMAGE_BACKEND",
@@ -266,11 +290,31 @@ class InstallerApp:
             "deployment_repo":    "DEPLOYMENT_REPO",
             "backup_ui_user":     "BACKUP_UI_USER",
             "backup_ui_password": "BACKUP_UI_PASSWORD",
+            "tz":                 "TZ",
         }
         for data_key, env_key in mapping.items():
             value = env_vals.get(env_key, "")
             if value:
                 self._data[data_key] = value
+
+    def _reload_provisioned_data(self) -> None:
+        """Re-read provisioned secrets from .env into self._data after step 1.
+
+        Called after provision.py has written BACKUP_UI_PASSWORD (and other
+        secrets) to .env so that step 2 shows the pre-filled password and
+        the admin does not need to re-enter it.
+        """
+        if not ENV_FILE.is_file():
+            return
+        vals = _read_env_keys(["BACKUP_UI_PASSWORD", "BACKUP_UI_USER", "TZ"])
+        for env_key, data_key in (
+            ("BACKUP_UI_PASSWORD", "backup_ui_password"),
+            ("BACKUP_UI_USER",     "backup_ui_user"),
+            ("TZ",                 "tz"),
+        ):
+            v = vals.get(env_key, "")
+            if v:
+                self._data[data_key] = v
 
     # ── Chrome (header + step indicator + nav bar) ────────────────────────────
 
@@ -399,6 +443,10 @@ class InstallerApp:
             value = var.get()
             if value:  # Only overwrite with non-empty so defaults survive
                 self._data[key] = value
+        if hasattr(self, "_s1_tz_var") and self._s1_tz_var is not None:
+            tz_val = self._s1_tz_var.get().strip()
+            if tz_val:
+                self._data["tz"] = tz_val
         if hasattr(self, "_s1_already_prov"):
             self._data["_already_prov"] = "1" if self._s1_already_prov.get() else ""
 
@@ -587,7 +635,6 @@ class InstallerApp:
             elif key == "api_url":
                 self._s1_entry_api_url = entry
 
-        # ── Recent-tags hint ──────────────────────────────────────────────
         self._s1_tags_hint = tk.Label(
             c, text="", bg="white", fg="#888",
             font=("Segoe UI", 9, "italic"), anchor="w",
@@ -595,6 +642,23 @@ class InstallerApp:
         self._s1_tags_hint.grid(row=len(fields)+4, column=0, columnspan=3,
                                 sticky="w", pady=(6, 0))
         self._s1_tags_fetch_after_id: str | None = None
+
+        # ── Timezone (TZ) ─────────────────────────────────────────────────
+        tk.Label(c, text=t("s1_lbl_tz"), bg="white", anchor="w",
+                 font=("Segoe UI", 10), width=30).grid(
+            row=len(fields)+5, column=0, sticky="w", pady=4)
+        self._s1_tz_var = tk.StringVar(
+            value=self._data.get("tz", "Europe/Berlin")
+        )
+        tz_combo = ttk.Combobox(
+            c, textvariable=self._s1_tz_var,
+            values=_TIMEZONES, width=46, state="readonly",
+            font=("Segoe UI", 10),
+        )
+        tz_combo.grid(row=len(fields)+5, column=1, sticky="w", padx=(8, 0), pady=4)
+        # Ensure the current value is visible in the list
+        if self._s1_tz_var.get() in _TIMEZONES:
+            tz_combo.current(_TIMEZONES.index(self._s1_tz_var.get()))
 
         def _on_repo_change(*_: object) -> None:
             if self._s1_tags_fetch_after_id is not None:
@@ -619,13 +683,13 @@ class InstallerApp:
 
         tk.Label(c, text=t("s1_lbl_output"), bg="white",
                  font=("Segoe UI", 10, "bold")).grid(
-            row=len(fields)+5, column=0, columnspan=3,
+            row=len(fields)+6, column=0, columnspan=3,
             sticky="w", pady=(14, 2))
 
         self._s1_log = scrolledtext.ScrolledText(
             c, height=11, width=82, font=("Courier", 9),
             state=tk.DISABLED, bg="#fafafa", relief=tk.SOLID, bd=1)
-        self._s1_log.grid(row=len(fields)+6, column=0, columnspan=3)
+        self._s1_log.grid(row=len(fields)+7, column=0, columnspan=3)
         c.columnconfigure(1, weight=1)
 
         # Apply initial toggle state (e.g. restored after language switch)
@@ -663,6 +727,12 @@ class InstallerApp:
 
     def _run_step1(self) -> None:
         vals = {k: v.get().strip() for k, v in self._s1_vars.items()}
+        tz_value = (
+            self._s1_tz_var.get().strip()
+            if hasattr(self, "_s1_tz_var") and self._s1_tz_var
+            else ""
+        ) or "Europe/Berlin"
+        self._data["tz"] = tz_value
 
         # ── Idee 1: skip provisioning when checkbox is set ────────────────
         if self._s1_already_prov.get():
@@ -691,15 +761,16 @@ class InstallerApp:
 
             def task_skip() -> None:
                 self._log(self._s1_log, t("s1_log_skip_provision"), C_INFO)
-                if patch:
-                    try:
-                        _patch_env_keys(patch)
-                        self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
-                    except Exception as exc:  # noqa: BLE001
-                        self._log(self._s1_log,
-                                  t("s1_log_tags_err", exc=str(exc)), C_DANGER)
-                        self._set_nav(back=False, next_=True)
-                        return
+                patch_full = {**patch, "TZ": tz_value}
+                try:
+                    _patch_env_keys(patch_full)
+                    self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
+                except Exception as exc:  # noqa: BLE001
+                    self._log(self._s1_log,
+                              t("s1_log_tags_err", exc=str(exc)), C_DANGER)
+                    self._set_nav(back=False, next_=True)
+                    return
+                self._reload_provisioned_data()
                 self._log(self._s1_log, t("s1_log_done"), C_SUCCESS)
                 self.root.after(600, lambda: self._show_step(1))
 
@@ -741,7 +812,7 @@ class InstallerApp:
                 self._set_nav(back=False, next_=True)
                 return
 
-            # Patch IMAGE_* into .env
+            # Patch IMAGE_* and TZ into .env
             self._log(self._s1_log, t("s1_log_writing"))
             try:
                 _patch_env_keys({
@@ -751,6 +822,7 @@ class InstallerApp:
                     "IMAGE_UPDATER":       vals["image_updater"],
                     "IMAGE_BACKUP":        vals["image_backup"],
                     "DEPLOYMENT_REPO":     vals["deployment_repo"],
+                    "TZ":                  tz_value,
                 })
                 self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
             except Exception as exc:  # noqa: BLE001
@@ -759,6 +831,7 @@ class InstallerApp:
                 self._set_nav(back=False, next_=True)
                 return
 
+            self._reload_provisioned_data()
             self._log(self._s1_log, t("s1_log_done"), C_SUCCESS)
             self.root.after(600, lambda: self._show_step(1))
 
@@ -884,10 +957,23 @@ class InstallerApp:
             bg="white", font=("Segoe UI", 9),
         ).grid(row=12, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
 
+        # Show a note when BACKUP_UI_PASSWORD was delivered by Legisell Provisioning
+        status_row = 14
+        if self._data.get("backup_ui_password"):
+            tk.Label(
+                c,
+                text=t("s2_backup_pass_provisioned"),
+                bg="#e8f5e9", fg="#2e7d32",
+                font=("Segoe UI", 9, "italic"),
+                anchor="w", padx=6, pady=3,
+                relief=tk.GROOVE, bd=1,
+            ).grid(row=13, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+            status_row = 15
+
         self._s2_status = tk.Label(
             c, text="", bg="white", font=("Segoe UI", 10),
             wraplength=720, justify=tk.LEFT)
-        self._s2_status.grid(row=14, column=0, columnspan=3,
+        self._s2_status.grid(row=status_row, column=0, columnspan=3,
                               sticky="w", pady=(24, 0))
         c.columnconfigure(1, weight=1)
 

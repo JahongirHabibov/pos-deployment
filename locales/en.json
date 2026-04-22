@@ -81,5 +81,7 @@
   "s1_err_no_env_for_skip": "No .env file found. Please run once without the checkbox to complete provisioning.",
   "s1_recent_tags_label": "Latest versions on GHCR:",
   "s1_hint_fetching": "Fetching latest versions …",
-  "s1_hint_fetch_err": "Could not retrieve versions."
+  "s1_hint_fetch_err": "Could not retrieve versions.",
+  "s1_lbl_tz": "Timezone (TZ):",
+  "s2_backup_pass_provisioned": "ℹ Password was set via Legisell Provisioning and pre-filled."
 }

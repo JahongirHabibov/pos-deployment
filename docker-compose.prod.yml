@@ -205,10 +205,4 @@ volumes:
 # =============================================================================
 networks:
   pos-network:
-    # External: das Netzwerk wird einmalig außerhalb dieses Compose-Projekts
-    # erstellt (z. B. via `docker network create pos-network` im Installer).
-    # Compose verwaltet den Lifecycle *nicht* — kein Löschen/Neuerstellen beim
-    # `up` oder `down`. Andere Container (z. B. pos-printer-sim) können dauerhaft
-    # verbunden bleiben, ohne das Deployment zu blockieren.
-    external: true
     name: pos-network
