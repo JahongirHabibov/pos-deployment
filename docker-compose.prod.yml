@@ -152,6 +152,12 @@ services:
       - MANAGED_SERVICES=backend,frontend,image-service
       - DEPLOYMENT_ENV=/app/deployment/.env
       - COMPOSE_FILE=/app/deployment/docker-compose.prod.yml
+      - HOST_COMPOSE_PROJECT_DIR=${HOST_COMPOSE_PROJECT_DIR}
+      - DRY_RUN=${DRY_RUN:-false}
+      - DRY_RUN_NEXT_VERSION=${DRY_RUN_NEXT_VERSION:-}
+      - CLEANUP_DELAY=${CLEANUP_DELAY:-86400}
+      - CLEANUP_CHECK_INTERVAL=${CLEANUP_CHECK_INTERVAL:-3600}
+      - POS_IMAGE_FILTER=${POS_IMAGE_FILTER:-pos-}
     networks:
       - pos-network
     healthcheck:

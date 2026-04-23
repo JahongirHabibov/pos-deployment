@@ -83,5 +83,24 @@
   "s1_hint_fetching": "Lade letzte Versionen …",
   "s1_hint_fetch_err": "Versionen konnten nicht abgerufen werden.",
   "s1_lbl_tz": "Zeitzone (TZ):",
-  "s2_backup_pass_provisioned": "ℹ Passwort wurde über Legisell Provisioning gesetzt und vorausgefüllt."
+  "s2_backup_pass_provisioned": "ℹ Passwort wurde über Legisell Provisioning gesetzt und vorausgefüllt.",
+
+  "s1_lbl_host_compose_dir": "Pfad zum pos-deployment:",
+
+  "s1_hint_otpk": "Einmaliger Aktivierungsschlüssel vom Legisell-Owner.",
+  "s1_hint_url": "Vollständige URL des Legisell-Backends, z. B. https://admin.legisell.de",
+  "s1_hint_image_backend": "Docker-Image-Tag für Backend, z. B. ghcr.io/org/pos-backend:1.2.3",
+  "s1_hint_image_frontend": "Docker-Image-Tag für den Frontend-Service.",
+  "s1_hint_image_service": "Docker-Image-Tag für den Bild-Upload-Service.",
+  "s1_hint_image_updater": "Docker-Image-Tag für den Updater-Sidecar.",
+  "s1_hint_image_backup": "Docker-Image-Tag für den Backup-Sidecar.",
+  "s1_hint_deployment_repo": "GitHub-Repo für Release-Infos, Format: org/pos-deployment",
+  "s1_hint_host_compose_dir": "Absoluter Host-Pfad zu diesem Verzeichnis, z. B. /home/pos-deployment. Wird vom Updater für Self-Updates benötigt.",
+  "s1_hint_tz": "IANA-Zeitzone für alle Container, z. B. Europe/Berlin",
+
+  "s2_hint_user": "GHCR-Benutzername (technischer Account).",
+  "s2_hint_token": "Personal Access Token mit read:packages-Berechtigung.",
+  "s2_hint_sudo": "Sudo-Passwort des aktuellen Benutzers für Docker-Befehle.",
+  "s2_hint_backup_user": "Benutzername für das Backup-Web-UI (Standard: admin).",
+  "s2_hint_backup_pass": "Passwort für das Backup-Web-UI auf Port 8300."
 }

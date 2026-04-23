@@ -21,7 +21,7 @@
   "s1_log_tags_err": "✗ Ошибка записи тегов: {exc}",
   "s1_log_done": "✓ Инициализация завершена! Переходите к следующему шагу.",
   "s2_title": "Шаг 2 — Вход в Docker Registry",
-  "s2_desc": "Введите учётные данные GHCR, полученные от владельца Legisell.\nОни необходимы для загрузки Docker-образов.",
+  "s2_desc": "Введите учётные данные GHCR, полученные от владельца Legisell. Они необходимы для загрузки Docker-образов.",
   "s2_lbl_user": "Пользователь GHCR:",
   "s2_lbl_token": "Токен GHCR / PAT:",
   "s2_show_token": "Показать токен",
@@ -83,5 +83,24 @@
   "s1_hint_fetching": "Загрузка последних версий …",
   "s1_hint_fetch_err": "Не удалось получить версии.",
   "s1_lbl_tz": "Часовой пояс (TZ):",
-  "s2_backup_pass_provisioned": "ℹ Пароль установлен через Legisell Provisioning и предзаполнен."
+  "s2_backup_pass_provisioned": "ℹ Пароль установлен через Legisell Provisioning и предзаполнен.",
+
+  "s1_lbl_host_compose_dir": "Путь к pos-deployment:",
+
+  "s1_hint_otpk": "Одноразовый ключ активации от владельца Legisell.",
+  "s1_hint_url": "Полный URL Legisell-бэкенда, например https://admin.legisell.de",
+  "s1_hint_image_backend": "Тег Docker-образа для бэкенда, например ghcr.io/org/pos-backend:1.2.3",
+  "s1_hint_image_frontend": "Тег Docker-образа для фронтенд-сервиса.",
+  "s1_hint_image_service": "Тег Docker-образа для сервиса загрузки изображений.",
+  "s1_hint_image_updater": "Тег Docker-образа для сайдкара обновлений.",
+  "s1_hint_image_backup": "Тег Docker-образа для сайдкара резервного копирования.",
+  "s1_hint_deployment_repo": "GitHub-репозиторий с информацией о релизах: org/pos-deployment",
+  "s1_hint_host_compose_dir": "Абсолютный путь к каталогу развёртывания на хосте, например /home/pos-deployment. Необходим для самообновления.",
+  "s1_hint_tz": "Часовой пояс IANA для всех контейнеров, например Europe/Berlin",
+
+  "s2_hint_user": "Имя пользователя GHCR (технический аккаунт).",
+  "s2_hint_token": "Personal Access Token с правом read:packages.",
+  "s2_hint_sudo": "Пароль sudo текущего пользователя для команд Docker.",
+  "s2_hint_backup_user": "Имя пользователя для веб-интерфейса резервного копирования (по умолчанию: admin).",
+  "s2_hint_backup_pass": "Пароль для веб-интерфейса резервного копирования на порту 8300."
 }

@@ -83,5 +83,24 @@
   "s1_hint_fetching": "Fetching latest versions …",
   "s1_hint_fetch_err": "Could not retrieve versions.",
   "s1_lbl_tz": "Timezone (TZ):",
-  "s2_backup_pass_provisioned": "ℹ Password was set via Legisell Provisioning and pre-filled."
+  "s2_backup_pass_provisioned": "ℹ Password was set via Legisell Provisioning and pre-filled.",
+
+  "s1_lbl_host_compose_dir": "Path to pos-deployment:",
+
+  "s1_hint_otpk": "One-time activation key provided by the Legisell owner.",
+  "s1_hint_url": "Full URL of the Legisell backend, e.g. https://admin.legisell.de",
+  "s1_hint_image_backend": "Docker image tag for the backend, e.g. ghcr.io/org/pos-backend:1.2.3",
+  "s1_hint_image_frontend": "Docker image tag for the frontend service.",
+  "s1_hint_image_service": "Docker image tag for the image upload service.",
+  "s1_hint_image_updater": "Docker image tag for the updater sidecar.",
+  "s1_hint_image_backup": "Docker image tag for the backup sidecar.",
+  "s1_hint_deployment_repo": "GitHub repo for release notes, format: org/pos-deployment",
+  "s1_hint_host_compose_dir": "Absolute host path to this directory, e.g. /home/pos-deployment. Required by the updater for self-updates.",
+  "s1_hint_tz": "IANA timezone for all containers, e.g. Europe/Berlin",
+
+  "s2_hint_user": "GHCR username (technical account).",
+  "s2_hint_token": "Personal Access Token with read:packages permission.",
+  "s2_hint_sudo": "Sudo password of the current user for Docker commands.",
+  "s2_hint_backup_user": "Username for the Backup Web UI (default: admin).",
+  "s2_hint_backup_pass": "Password to access the Backup Web UI on port 8300."
 }

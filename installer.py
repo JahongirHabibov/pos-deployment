@@ -251,10 +251,13 @@ class InstallerApp:
         self.root = root
         self.root.title(t("title"))
         self.root.resizable(True, True)
-        self.root.geometry("860x860")
-        self.root.minsize(840, 700)
+        self.root.geometry("989x1075")
+        self.root.minsize(966, 875)
         self.root.configure(bg="#ffffff")
 
+        # UI Scale: "S" (small), "M" (medium), "L" (large)
+        self._ui_scale: str = "M"
+        
         # Shared state collected across steps
         self._data: dict[str, str] = {}
         self._load_env_into_data()  # Idee 2: pre-fill from existing .env
@@ -265,6 +268,39 @@ class InstallerApp:
 
         self._build_chrome()
         self._show_step(2 if skip_setup else 0)
+
+    # ── UI Scaling Helpers ────────────────────────────────────────────────────
+
+    def _get_font_size(self, base_size: int) -> int:
+        """Return scaled font size based on _ui_scale."""
+        scale_factors = {"S": 0.9, "M": 1.0, "L": 1.25}
+        factor = scale_factors.get(self._ui_scale, 1.0)
+        return max(7, int(base_size * factor))
+
+    def _get_entry_width(self, base_width: int) -> int:
+        """Return scaled entry field width."""
+        scale_factors = {"S": 0.85, "M": 1.0, "L": 1.15}
+        factor = scale_factors.get(self._ui_scale, 1.0)
+        return max(20, int(base_width * factor))
+
+    def _get_wraplength(self, base_length: int) -> int:
+        """Return scaled text wraplength."""
+        scale_factors = {"S": 0.9, "M": 1.0, "L": 1.2}
+        factor = scale_factors.get(self._ui_scale, 1.0)
+        return int(base_length * factor)
+
+    def _get_padding(self, base_padding: int) -> int:
+        """Return scaled padding value."""
+        scale_factors = {"S": 0.8, "M": 1.0, "L": 1.2}
+        factor = scale_factors.get(self._ui_scale, 1.0)
+        return int(base_padding * factor)
+
+    def _set_ui_scale(self, scale: str) -> None:
+        """Change UI scale and rebuild current step."""
+        if scale != self._ui_scale:
+            self._ui_scale = scale
+            self._save_step_state()
+            self._show_step(self._current_step)
 
     # ── Idee 2: Pre-fill from existing .env ────────────────────────────────────
 
@@ -279,7 +315,8 @@ class InstallerApp:
         env_vals = _read_env_keys([
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
             "IMAGE_UPDATER", "IMAGE_BACKUP", "DEPLOYMENT_REPO",
-            "BACKUP_UI_USER", "BACKUP_UI_PASSWORD", "TZ",
+            "HOST_COMPOSE_PROJECT_DIR",
+            "BACKUP_UI_USER", "BACKUP_UI_PASSWORD", "TZ", "PROVISION_DONE",
         ])
         mapping = {
             "image_backend":      "IMAGE_BACKEND",
@@ -288,6 +325,7 @@ class InstallerApp:
             "image_updater":      "IMAGE_UPDATER",
             "image_backup":       "IMAGE_BACKUP",
             "deployment_repo":    "DEPLOYMENT_REPO",
+            "host_compose_dir":   "HOST_COMPOSE_PROJECT_DIR",
             "backup_ui_user":     "BACKUP_UI_USER",
             "backup_ui_password": "BACKUP_UI_PASSWORD",
             "tz":                 "TZ",
@@ -296,6 +334,9 @@ class InstallerApp:
             value = env_vals.get(env_key, "")
             if value:
                 self._data[data_key] = value
+        # Auto-check "skip provisioning" if PROVISION_DONE=true
+        if env_vals.get("PROVISION_DONE", "").lower() == "true":
+            self._data["_already_prov"] = "1"
 
     def _reload_provisioned_data(self) -> None:
         """Re-read provisioned secrets from .env into self._data after step 1.
@@ -306,7 +347,7 @@ class InstallerApp:
         """
         if not ENV_FILE.is_file():
             return
-        vals = _read_env_keys(["BACKUP_UI_PASSWORD", "BACKUP_UI_USER", "TZ"])
+        vals = _read_env_keys(["BACKUP_UI_PASSWORD", "BACKUP_UI_USER", "TZ", "PROVISION_DONE"])
         for env_key, data_key in (
             ("BACKUP_UI_PASSWORD", "backup_ui_password"),
             ("BACKUP_UI_USER",     "backup_ui_user"),
@@ -315,6 +356,9 @@ class InstallerApp:
             v = vals.get(env_key, "")
             if v:
                 self._data[data_key] = v
+        # Auto-check "skip provisioning" if PROVISION_DONE=true
+        if vals.get("PROVISION_DONE", "").lower() == "true":
+            self._data["_already_prov"] = "1"
 
     # ── Chrome (header + step indicator + nav bar) ────────────────────────────
 
@@ -349,6 +393,26 @@ class InstallerApp:
             btn.pack(side=tk.RIGHT, padx=(0, 6), pady=10)
             self._lang_btns[code] = btn
 
+        # UI Scale selector (S / M / L) — right side of header, before language
+        tk.Label(hdr, text="Zoom:", bg=C_BRAND, fg="white",
+                 font=("Segoe UI", 9)).pack(side=tk.RIGHT, padx=(16, 6), pady=10)
+        self._scale_btns: dict[str, tk.Button] = {}
+        for scale in ("S", "M", "L"):
+            btn = tk.Button(
+                hdr,
+                text=scale,
+                width=2,
+                bg=C_ACCENT if scale == self._ui_scale else "#3a3a5c",
+                fg="white",
+                activebackground=C_ACCENT,
+                activeforeground="white",
+                relief=tk.FLAT,
+                font=("Segoe UI", 9, "bold"),
+                command=lambda s=scale: self._set_ui_scale_and_update_buttons(s),
+            )
+            btn.pack(side=tk.RIGHT, padx=(0, 4), pady=10)
+            self._scale_btns[scale] = btn
+
         # Step indicator bar
         self._step_bar = tk.Frame(self.root, bg="#e8eaf6", pady=0)
         self._step_bar.pack(fill=tk.X)
@@ -368,9 +432,38 @@ class InstallerApp:
         nav = tk.Frame(self.root, bg="white", pady=10)
         nav.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Content area — fills remaining space, scrollable on resize
-        self._content = tk.Frame(self.root, bg="white", padx=28, pady=20)
-        self._content.pack(fill=tk.BOTH, expand=True)
+        # Content area — scrollable canvas wrapper with frame inside
+        self._canvas = tk.Canvas(self.root, bg="white", highlightthickness=0)
+        self._canvas.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        # Vertical scrollbar
+        self._scrollbar = ttk.Scrollbar(self.root, orient=tk.VERTICAL, command=self._canvas.yview)
+        self._scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._canvas.configure(yscrollcommand=self._scrollbar.set)
+        
+        # Inner frame that holds all content widgets
+        self._content = tk.Frame(self._canvas, bg="white", padx=28, pady=20)
+        self._canvas_window = self._canvas.create_window(0, 0, window=self._content, anchor="nw")
+        
+        # Update scroll region when content frame changes size
+        def _on_frame_configure(event):
+            self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        
+        self._content.bind("<Configure>", _on_frame_configure)
+        
+        # Mouse wheel scrolling support — only bind to canvas
+        def _on_mousewheel(event):
+            self._canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def _on_mousewheel_linux(event):
+            if event.num == 4:
+                self._canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                self._canvas.yview_scroll(1, "units")
+        
+        self._canvas.bind("<MouseWheel>", _on_mousewheel)  # Windows/macOS
+        self._canvas.bind("<Button-4>", _on_mousewheel_linux)  # Linux
+        self._canvas.bind("<Button-5>", _on_mousewheel_linux)  # Linux
         self._btn_back = tk.Button(
             nav, text=t("btn_back"), width=12,
             bg="#f0f0f0", relief=tk.FLAT,
@@ -418,6 +511,13 @@ class InstallerApp:
         self._btn_cancel.configure(text=t("btn_cancel"))
         # Rebuild current step content + nav button labels
         self._show_step(self._current_step)
+
+    def _set_ui_scale_and_update_buttons(self, scale: str) -> None:
+        """Change the UI scale and update button highlighting."""
+        self._set_ui_scale(scale)
+        # Highlight the active scale button
+        for s, btn in self._scale_btns.items():
+            btn.configure(bg=C_ACCENT if s == scale else "#3a3a5c")
 
     def _save_step_state(self) -> None:
         """Snapshot currently displayed field values into self._data.
@@ -573,14 +673,14 @@ class InstallerApp:
     def _build_step1(self) -> None:
         c = self._content
         tk.Label(c, text=t("s1_title"),
-                 font=("Segoe UI", 13, "bold"), bg="white").grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+                 font=("Segoe UI", self._get_font_size(13), "bold"), bg="white").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         tk.Label(
             c,
             text=t("s1_desc"),
-            bg="white", fg="#555", font=("Segoe UI", 9),
+            bg="white", fg="#555", font=("Segoe UI", self._get_font_size(9)),
             justify=tk.LEFT,
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
         # ── Idee 2: info banner when .env already exists ──────────────────
         if ENV_FILE.is_file():
@@ -588,10 +688,10 @@ class InstallerApp:
                 c,
                 text=t("s1_env_prefilled"),
                 bg="#e8f5e9", fg="#2e7d32",
-                font=("Segoe UI", 9, "italic"),
+                font=("Segoe UI", self._get_font_size(9), "italic"),
                 anchor="w", padx=6, pady=3,
                 relief=tk.GROOVE, bd=1,
-            ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+            ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 6))
 
         # ── Idee 1: "already provisioned" checkbox ────────────────────────
         self._s1_already_prov = tk.BooleanVar(
@@ -602,63 +702,83 @@ class InstallerApp:
             text=t("s1_chk_already_provisioned"),
             variable=self._s1_already_prov,
             command=self._toggle_provision_mode,
-            bg="white", font=("Segoe UI", 9),
+            bg="white", font=("Segoe UI", self._get_font_size(9)),
             anchor="w",
-        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
         fields = [
-            ("otpk",            t("s1_lbl_otpk"),       False),
-            ("api_url",         t("s1_lbl_url"),        False),
-            ("image_backend",   "IMAGE_BACKEND:",       False),
-            ("image_frontend",  "IMAGE_FRONTEND:",      False),
-            ("image_service",   "IMAGE_IMAGE_SERVICE:", False),
-            ("image_updater",   "IMAGE_UPDATER:",       False),
-            ("image_backup",    "IMAGE_BACKUP:",        False),
-            ("deployment_repo", "DEPLOYMENT_REPO:",     False),
+            ("otpk",             t("s1_lbl_otpk"),              False, "s1_hint_otpk"),
+            ("api_url",          t("s1_lbl_url"),               False, "s1_hint_url"),
+            ("image_backend",    "IMAGE_BACKEND:",               False, "s1_hint_image_backend"),
+            ("image_frontend",   "IMAGE_FRONTEND:",              False, "s1_hint_image_frontend"),
+            ("image_service",    "IMAGE_IMAGE_SERVICE:",         False, "s1_hint_image_service"),
+            ("image_updater",    "IMAGE_UPDATER:",               False, "s1_hint_image_updater"),
+            ("image_backup",     "IMAGE_BACKUP:",                False, "s1_hint_image_backup"),
+            ("deployment_repo",  "DEPLOYMENT_REPO:",             False, "s1_hint_deployment_repo"),
+            ("host_compose_dir", t("s1_lbl_host_compose_dir"),  False, "s1_hint_host_compose_dir"),
         ]
         self._s1_vars: dict[str, tk.StringVar] = {}
         self._s1_entry_otpk: tk.Entry | None = None
         self._s1_entry_api_url: tk.Entry | None = None
-        for row, (key, label, secret) in enumerate(fields, start=4):
+        
+        current_row = 4
+        for key, label, secret, hint_key in fields:
             tk.Label(c, text=label, bg="white", anchor="w",
-                     font=("Segoe UI", 10), width=30).grid(
-                row=row, column=0, sticky="w", pady=4)
+                     font=("Segoe UI", self._get_font_size(10), "bold"), width=30).grid(
+                row=current_row, column=0, sticky="w", pady=(4, 2))
             var = tk.StringVar(value=self._data.get(key, ""))
-            entry = tk.Entry(c, textvariable=var, width=48,
+            entry = tk.Entry(c, textvariable=var, width=self._get_entry_width(53),
                              show="*" if secret else "",
-                             font=("Segoe UI", 10),
+                             font=("Segoe UI", self._get_font_size(10)),
                              relief=tk.SOLID, bd=1)
-            entry.grid(row=row, column=1, sticky="w", padx=(8, 0), pady=4)
+            entry.grid(row=current_row, column=1, sticky="ew", padx=(0, 0), pady=(4, 2))
+            
+            tk.Label(
+                c, text=t(hint_key), bg="white", fg="#000",
+                font=("Segoe UI", self._get_font_size(9)),
+                wraplength=self._get_wraplength(550), anchor="nw", justify=tk.LEFT,
+            ).grid(row=current_row+1, column=1, sticky="ew", padx=(0, 0), pady=(0, 6))
+            
             self._s1_vars[key] = var
             if key == "otpk":
                 self._s1_entry_otpk = entry
             elif key == "api_url":
                 self._s1_entry_api_url = entry
+            
+            current_row += 2
 
         self._s1_tags_hint = tk.Label(
-            c, text="", bg="white", fg="#888",
-            font=("Segoe UI", 9, "italic"), anchor="w",
+            c, text="", bg="white", fg="#0288d1",
+            font=("Segoe UI", self._get_font_size(9)), anchor="nw",
         )
-        self._s1_tags_hint.grid(row=len(fields)+4, column=0, columnspan=3,
-                                sticky="w", pady=(6, 0))
+        self._s1_tags_hint.grid(row=current_row, column=1, sticky="ew", pady=(6, 0))
         self._s1_tags_fetch_after_id: str | None = None
+        current_row += 1
 
         # ── Timezone (TZ) ─────────────────────────────────────────────────
         tk.Label(c, text=t("s1_lbl_tz"), bg="white", anchor="w",
-                 font=("Segoe UI", 10), width=30).grid(
-            row=len(fields)+5, column=0, sticky="w", pady=4)
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=30).grid(
+            row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s1_tz_var = tk.StringVar(
             value=self._data.get("tz", "Europe/Berlin")
         )
         tz_combo = ttk.Combobox(
             c, textvariable=self._s1_tz_var,
-            values=_TIMEZONES, width=46, state="readonly",
-            font=("Segoe UI", 10),
+            values=_TIMEZONES, width=self._get_entry_width(51), state="readonly",
+            font=("Segoe UI", self._get_font_size(10)),
         )
-        tz_combo.grid(row=len(fields)+5, column=1, sticky="w", padx=(8, 0), pady=4)
+        tz_combo.grid(row=current_row, column=1, sticky="ew", padx=(0, 0), pady=(4, 2))
         # Ensure the current value is visible in the list
         if self._s1_tz_var.get() in _TIMEZONES:
             tz_combo.current(_TIMEZONES.index(self._s1_tz_var.get()))
+        
+        tk.Label(
+            c, text=t("s1_hint_tz"), bg="white", fg="#000",
+            font=("Segoe UI", self._get_font_size(9)),
+            wraplength=self._get_wraplength(550), anchor="nw",
+        ).grid(row=current_row+1, column=1, sticky="ew", padx=(0, 0), pady=(0, 6))
+        
+        current_row += 2
 
         def _on_repo_change(*_: object) -> None:
             if self._s1_tags_fetch_after_id is not None:
@@ -666,7 +786,7 @@ class InstallerApp:
             repo = self._s1_vars["deployment_repo"].get().strip()
             if repo and "/" in repo:
                 self._s1_tags_hint.configure(
-                    text=t("s1_hint_fetching"), fg="#888")
+                    text=t("s1_hint_fetching"), fg="#0288d1")
                 self._s1_tags_fetch_after_id = self.root.after(
                     800,
                     lambda r=repo: threading.Thread(
@@ -682,15 +802,16 @@ class InstallerApp:
         _on_repo_change()
 
         tk.Label(c, text=t("s1_lbl_output"), bg="white",
-                 font=("Segoe UI", 10, "bold")).grid(
-            row=len(fields)+6, column=0, columnspan=3,
+                 font=("Segoe UI", self._get_font_size(10), "bold")).grid(
+            row=current_row, column=0, columnspan=2,
             sticky="w", pady=(14, 2))
 
         self._s1_log = scrolledtext.ScrolledText(
-            c, height=11, width=82, font=("Courier", 9),
+            c, height=11, width=82, font=("Courier", self._get_font_size(9)),
             state=tk.DISABLED, bg="#fafafa", relief=tk.SOLID, bd=1)
-        self._s1_log.grid(row=len(fields)+7, column=0, columnspan=3)
+        self._s1_log.grid(row=current_row+1, column=0, columnspan=2, sticky="ew")
         c.columnconfigure(1, weight=1)
+        c.rowconfigure(current_row+1, weight=1)
 
         # Apply initial toggle state (e.g. restored after language switch)
         if self._s1_already_prov.get():
@@ -741,14 +862,15 @@ class InstallerApp:
                                      t("s1_err_no_env_for_skip"))
                 return
 
-            # Only patch IMAGE_* / DEPLOYMENT_REPO fields that were filled in
+            # Only patch IMAGE_* / DEPLOYMENT_REPO / HOST_COMPOSE_PROJECT_DIR fields that were filled in
             env_key_map = {
-                "image_backend":   "IMAGE_BACKEND",
-                "image_frontend":  "IMAGE_FRONTEND",
-                "image_service":   "IMAGE_IMAGE_SERVICE",
-                "image_updater":   "IMAGE_UPDATER",
-                "image_backup":    "IMAGE_BACKUP",
-                "deployment_repo": "DEPLOYMENT_REPO",
+                "image_backend":    "IMAGE_BACKEND",
+                "image_frontend":   "IMAGE_FRONTEND",
+                "image_service":    "IMAGE_IMAGE_SERVICE",
+                "image_updater":    "IMAGE_UPDATER",
+                "image_backup":     "IMAGE_BACKUP",
+                "deployment_repo":  "DEPLOYMENT_REPO",
+                "host_compose_dir": "HOST_COMPOSE_PROJECT_DIR",
             }
             patch = {
                 env_key: vals[field_key]
@@ -816,13 +938,15 @@ class InstallerApp:
             self._log(self._s1_log, t("s1_log_writing"))
             try:
                 _patch_env_keys({
-                    "IMAGE_BACKEND":       vals["image_backend"],
-                    "IMAGE_FRONTEND":      vals["image_frontend"],
-                    "IMAGE_IMAGE_SERVICE": vals["image_service"],
-                    "IMAGE_UPDATER":       vals["image_updater"],
-                    "IMAGE_BACKUP":        vals["image_backup"],
-                    "DEPLOYMENT_REPO":     vals["deployment_repo"],
-                    "TZ":                  tz_value,
+                    "IMAGE_BACKEND":            vals["image_backend"],
+                    "IMAGE_FRONTEND":           vals["image_frontend"],
+                    "IMAGE_IMAGE_SERVICE":       vals["image_service"],
+                    "IMAGE_UPDATER":             vals["image_updater"],
+                    "IMAGE_BACKUP":              vals["image_backup"],
+                    "DEPLOYMENT_REPO":           vals["deployment_repo"],
+                    "HOST_COMPOSE_PROJECT_DIR":  vals["host_compose_dir"],
+                    "TZ":                        tz_value,
+                    "PROVISION_DONE":            "true",
                 })
                 self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
             except Exception as exc:  # noqa: BLE001
@@ -842,25 +966,27 @@ class InstallerApp:
     def _build_step2(self) -> None:
         c = self._content
         tk.Label(c, text=t("s2_title"),
-                 font=("Segoe UI", 13, "bold"), bg="white").grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+                 font=("Segoe UI", self._get_font_size(13), "bold"), bg="white").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         tk.Label(
             c,
             text=t("s2_desc"),
-            bg="white", fg="#555", font=("Segoe UI", 9),
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+            bg="white", fg="#555", font=("Segoe UI", self._get_font_size(9)),
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
         # ── auto-detect existing GHCR credentials ─────────────────────────
         creds_found, creds_source = _has_ghcr_credentials()
+        current_row = 2
         if creds_found:
             tk.Label(
                 c,
                 text=t("s2_creds_found", source=creds_source),
                 bg="#e8f5e9", fg="#2e7d32",
-                font=("Segoe UI", 9, "italic"),
+                font=("Segoe UI", self._get_font_size(9), "italic"),
                 anchor="w", padx=6, pady=3,
                 relief=tk.GROOVE, bd=1,
-            ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 4))
+            ).grid(row=current_row, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+            current_row += 1
 
         # ── "already logged in" checkbox ───────────────────────────────────
         if "_already_logged_in" in self._data:
@@ -873,108 +999,143 @@ class InstallerApp:
             text=t("s2_chk_already_logged_in"),
             variable=self._s2_already_logged_in,
             command=self._toggle_login_mode,
-            bg="white", font=("Segoe UI", 9),
+            bg="white", font=("Segoe UI", self._get_font_size(9)),
             anchor="w",
-        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        ).grid(row=current_row, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        current_row += 1
 
+        # ── GHCR User ─────────────────────────────────────────────────────
         tk.Label(c, text=t("s2_lbl_user"), bg="white",
-                 font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=4, column=0, sticky="w", pady=8)
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
+            row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s2_user = tk.StringVar(value=self._data.get("ghcr_user", ""))
         self._s2_user_entry = tk.Entry(
-            c, textvariable=self._s2_user, width=44,
-            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-        self._s2_user_entry.grid(row=4, column=1, sticky="w", padx=(8, 0))
+            c, textvariable=self._s2_user, width=self._get_entry_width(53),
+            font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
+        self._s2_user_entry.grid(row=current_row, column=1, sticky="ew", padx=(0, 0))
+        tk.Label(
+            c, text=t("s2_hint_user"), bg="white", fg="#000",
+            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
+        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 6))
+        current_row += 2
 
+        # ── GHCR Token ─────────────────────────────────────────────────────
         tk.Label(c, text=t("s2_lbl_token"), bg="white",
-                 font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=5, column=0, sticky="w", pady=8)
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
+            row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s2_token = tk.StringVar(value=self._data.get("ghcr_token", ""))
         self._s2_token_entry = tk.Entry(
-            c, textvariable=self._s2_token, width=44, show="*",
-            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-        self._s2_token_entry.grid(row=5, column=1, sticky="w", padx=(8, 0))
+            c, textvariable=self._s2_token, width=self._get_entry_width(53), show="*",
+            font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
+        self._s2_token_entry.grid(row=current_row, column=1, sticky="ew", padx=(0, 0))
+        tk.Label(
+            c, text=t("s2_hint_token"), bg="white", fg="#000",
+            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
+        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 2))
+        current_row += 2
 
         self._s2_show_token = tk.BooleanVar(value=False)
         self._s2_show_token_btn = tk.Checkbutton(
             c, text=t("s2_show_token"),
             variable=self._s2_show_token,
             command=self._toggle_token_visibility,
-            bg="white", font=("Segoe UI", 9),
+            bg="white", font=("Segoe UI", self._get_font_size(9)),
         )
-        self._s2_show_token_btn.grid(row=6, column=1, sticky="w",
-                                     padx=(8, 0), pady=(2, 0))
+        self._s2_show_token_btn.grid(row=current_row, column=1, sticky="w",
+                                     padx=(0, 0), pady=(0, 6))
+        current_row += 1
 
+        # ── Sudo Password ──────────────────────────────────────────────────
         tk.Label(c, text=t("s2_lbl_sudo"), bg="white",
-                 font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=7, column=0, sticky="w", pady=8)
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
+            row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s2_sudo = tk.StringVar(value=self._data.get("sudo_password", ""))
         self._s2_sudo_entry = tk.Entry(
-            c, textvariable=self._s2_sudo, width=44, show="*",
-            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-        self._s2_sudo_entry.grid(row=7, column=1, sticky="w", padx=(8, 0))
+            c, textvariable=self._s2_sudo, width=self._get_entry_width(53), show="*",
+            font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
+        self._s2_sudo_entry.grid(row=current_row, column=1, sticky="ew", padx=(0, 0))
+        tk.Label(
+            c, text=t("s2_hint_sudo"), bg="white", fg="#000",
+            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
+        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 2))
+        current_row += 2
 
         self._s2_show_sudo = tk.BooleanVar(value=False)
         self._s2_show_sudo_btn = tk.Checkbutton(
             c, text=t("s2_show_sudo"),
             variable=self._s2_show_sudo,
             command=self._toggle_sudo_visibility,
-            bg="white", font=("Segoe UI", 9),
+            bg="white", font=("Segoe UI", self._get_font_size(9)),
         )
-        self._s2_show_sudo_btn.grid(row=8, column=1, sticky="w",
-                                    padx=(8, 0), pady=(2, 0))
+        self._s2_show_sudo_btn.grid(row=current_row, column=1, sticky="w",
+                                    padx=(0, 0), pady=(0, 6))
+        current_row += 1
 
+        # ── Backup Section ────────────────────────────────────────────────
         tk.Label(c, text=t("s2_backup_section"),
-                 bg="white", fg="#888", font=("Segoe UI", 9, "italic"),
-                 anchor="w").grid(row=9, column=0, columnspan=3,
+                 bg="white", fg="#888", font=("Segoe UI", self._get_font_size(9), "italic"),
+                 anchor="w").grid(row=current_row, column=0, columnspan=2,
                                   sticky="w", pady=(16, 4))
+        current_row += 1
 
+        # ── Backup UI User ────────────────────────────────────────────────
         tk.Label(c, text=t("s2_lbl_backup_user"), bg="white",
-                 font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=10, column=0, sticky="w", pady=8)
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
+            row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s2_backup_user = tk.StringVar(
             value=self._data.get("backup_ui_user", "admin"))
-        tk.Entry(c, textvariable=self._s2_backup_user, width=44,
-                 font=("Segoe UI", 10), relief=tk.SOLID, bd=1).grid(
-            row=10, column=1, sticky="w", padx=(8, 0))
+        tk.Entry(c, textvariable=self._s2_backup_user, width=self._get_entry_width(53),
+                 font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1).grid(
+            row=current_row, column=1, sticky="ew", padx=(0, 0))
+        tk.Label(
+            c, text=t("s2_hint_backup_user"), bg="white", fg="#000",
+            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
+        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 6))
+        current_row += 2
 
+        # ── Backup UI Password ────────────────────────────────────────────
         tk.Label(c, text=t("s2_lbl_backup_pass"), bg="white",
-                 font=("Segoe UI", 10), width=26, anchor="w").grid(
-            row=11, column=0, sticky="w", pady=8)
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
+            row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s2_backup_pass = tk.StringVar(
             value=self._data.get("backup_ui_password", ""))
         self._s2_backup_pass_entry = tk.Entry(
-            c, textvariable=self._s2_backup_pass, width=44, show="*",
-            font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-        self._s2_backup_pass_entry.grid(row=11, column=1, sticky="w",
-                                        padx=(8, 0))
+            c, textvariable=self._s2_backup_pass, width=self._get_entry_width(53), show="*",
+            font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
+        self._s2_backup_pass_entry.grid(row=current_row, column=1, sticky="ew",
+                                        padx=(0, 0))
+        tk.Label(
+            c, text=t("s2_hint_backup_pass"), bg="white", fg="#000",
+            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
+        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 2))
+        current_row += 2
 
         self._s2_show_backup_pass = tk.BooleanVar(value=False)
         tk.Checkbutton(
             c, text=t("s2_show_backup_pass"),
             variable=self._s2_show_backup_pass,
             command=self._toggle_backup_pass_visibility,
-            bg="white", font=("Segoe UI", 9),
-        ).grid(row=12, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
+            bg="white", font=("Segoe UI", self._get_font_size(9)),
+        ).grid(row=current_row, column=1, sticky="w", padx=(0, 0), pady=(0, 6))
+        current_row += 1
 
         # Show a note when BACKUP_UI_PASSWORD was delivered by Legisell Provisioning
-        status_row = 14
         if self._data.get("backup_ui_password"):
             tk.Label(
                 c,
                 text=t("s2_backup_pass_provisioned"),
                 bg="#e8f5e9", fg="#2e7d32",
-                font=("Segoe UI", 9, "italic"),
+                font=("Segoe UI", self._get_font_size(9), "italic"),
                 anchor="w", padx=6, pady=3,
                 relief=tk.GROOVE, bd=1,
-            ).grid(row=13, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-            status_row = 15
+            ).grid(row=current_row, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+            current_row += 1
 
         self._s2_status = tk.Label(
-            c, text="", bg="white", font=("Segoe UI", 10),
-            wraplength=720, justify=tk.LEFT)
-        self._s2_status.grid(row=status_row, column=0, columnspan=3,
-                              sticky="w", pady=(24, 0))
+            c, text="", bg="white", font=("Segoe UI", self._get_font_size(10)),
+            wraplength=self._get_wraplength(750), justify=tk.LEFT)
+        self._s2_status.grid(row=current_row, column=0, columnspan=2,
+                              sticky="ew", pady=(24, 0))
         c.columnconfigure(1, weight=1)
 
         # Apply initial toggle state
@@ -1134,7 +1295,7 @@ class InstallerApp:
     def _build_step3(self) -> None:
         c = self._content
         tk.Label(c, text=t("s3_title"),
-                 font=("Segoe UI", 13, "bold"), bg="white").grid(
+                 font=("Segoe UI", self._get_font_size(13), "bold"), bg="white").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
         next_row = 1
@@ -1142,7 +1303,7 @@ class InstallerApp:
             banner = tk.Label(
                 c, text=t("skip_banner"),
                 bg="#fff3cd", fg="#856404",
-                font=("Segoe UI", 10, "bold"),
+                font=("Segoe UI", self._get_font_size(10), "bold"),
                 anchor="w", padx=10, pady=6,
                 relief=tk.GROOVE, bd=1,
             )
@@ -1170,21 +1331,21 @@ class InstallerApp:
         ]
 
         box = tk.Frame(c, bg="#f0f4ff", relief=tk.RIDGE, bd=1,
-                       padx=16, pady=12)
+                       padx=self._get_padding(16), pady=self._get_padding(12))
         box.grid(row=next_row, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         for i, (k, v) in enumerate(summary):
             tk.Label(box, text=k + ":", bg="#f0f4ff", anchor="w", width=26,
-                     font=("Segoe UI", 9, "bold")).grid(
+                     font=("Segoe UI", self._get_font_size(9), "bold")).grid(
                 row=i, column=0, sticky="w", pady=2)
             tk.Label(box, text=v, bg="#f0f4ff", anchor="w",
-                     font=("Segoe UI", 9), wraplength=500,
+                     font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(500),
                      justify=tk.LEFT).grid(
                 row=i, column=1, sticky="w", padx=(8, 0))
 
         tk.Label(
             c,
             text=t("s3_hint"),
-            bg="white", fg="#555", font=("Segoe UI", 9),
+            bg="white", fg="#555", font=("Segoe UI", self._get_font_size(9)),
         ).grid(row=next_row+1, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
         # Sudo-Passwort-Feld — nur anzeigen wenn Schritt 2 übersprungen wurde
@@ -1194,34 +1355,35 @@ class InstallerApp:
         if not self._data.get("sudo_password"):
             sudo_row_offset = 2
             tk.Label(c, text=t("s3_lbl_sudo"), bg="white",
-                     font=("Segoe UI", 10), width=26, anchor="w").grid(
-                row=next_row+2, column=0, sticky="w", pady=8)
+                     font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
+                row=next_row+2, column=0, sticky="w", pady=(4, 2))
             self._s3_sudo_var = tk.StringVar()
             self._s3_sudo_entry = tk.Entry(
-                c, textvariable=self._s3_sudo_var, width=44, show="*",
-                font=("Segoe UI", 10), relief=tk.SOLID, bd=1)
-            self._s3_sudo_entry.grid(row=next_row+2, column=1, sticky="w", padx=(8, 0))
+                c, textvariable=self._s3_sudo_var, width=self._get_entry_width(53), show="*",
+                font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
+            self._s3_sudo_entry.grid(row=next_row+2, column=1, sticky="ew", padx=(0, 0))
             self._s3_show_sudo_var = tk.BooleanVar(value=False)
             tk.Checkbutton(
                 c, text=t("s3_show_sudo"),
                 variable=self._s3_show_sudo_var,
                 command=self._toggle_step3_sudo_visibility,
-                bg="white", font=("Segoe UI", 9),
-            ).grid(row=next_row+3, column=1, sticky="w", padx=(8, 0), pady=(2, 0))
+                bg="white", font=("Segoe UI", self._get_font_size(9)),
+            ).grid(row=next_row+3, column=1, sticky="w", padx=(0, 0), pady=(2, 0))
 
         tk.Label(c, text=t("s3_lbl_log"), bg="white",
-                 font=("Segoe UI", 10, "bold")).grid(
+                 font=("Segoe UI", self._get_font_size(10), "bold")).grid(
             row=next_row+2+sudo_row_offset, column=0, columnspan=2, sticky="w", pady=(4, 2))
 
         self._s3_log = scrolledtext.ScrolledText(
-            c, height=15, width=82, font=("Courier", 9),
+            c, height=15, width=82, font=("Courier", self._get_font_size(9)),
             state=tk.DISABLED,
             bg="#0d1117", fg="#c9d1d9",
             insertbackground="white",
             relief=tk.SOLID, bd=1,
         )
-        self._s3_log.grid(row=next_row+3+sudo_row_offset, column=0, columnspan=2)
+        self._s3_log.grid(row=next_row+3+sudo_row_offset, column=0, columnspan=2, sticky="ew")
         c.columnconfigure(1, weight=1)
+        c.rowconfigure(next_row+3+sudo_row_offset, weight=1)
 
     def _run_step3(self) -> None:
         self._btn_next.configure(state=tk.DISABLED)  # sofortiges Deaktivieren (verhindert Doppelklick)
@@ -1290,6 +1452,130 @@ class InstallerApp:
                     p.wait()
                     return p
 
+                def _run_compose_with_progress(
+                    subcmd: list[str],
+                    operation_label: str
+                ) -> "subprocess.Popen[str] | None":
+                    """Run `sudo docker compose *subcmd` with progress spinner.
+                    
+                    Instead of logging every line, buffers output and displays
+                    a progress line with spinner animation every 5 seconds.
+                    Only logs a summary (success/failure) to the log file.
+                    
+                    Returns the finished Popen object, or None if docker was not found.
+                    """
+                    import threading
+                    import time
+                    
+                    cmd = ["sudo", "-k", "-S", "docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
+                    try:
+                        p = subprocess.Popen(
+                            cmd,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            cwd=str(REPO_DIR),
+                            env=env,
+                            bufsize=1,
+                        )
+                    except FileNotFoundError:
+                        self._log(self._s3_log, t("s3_no_docker"), C_DANGER)
+                        self._set_nav(back=True, next_=False)
+                        return None
+                    
+                    self._deploy_proc = p
+                    assert p.stdin is not None
+                    p.stdin.write(sudo_password + "\n")
+                    p.stdin.flush()
+                    p.stdin.close()
+                    
+                    # Circular buffer: keep last 500 lines for error reporting
+                    output_buffer: list[str] = []
+                    buffer_max_size = 500
+                    lock = threading.Lock()
+                    stop_progress = threading.Event()
+                    
+                    # Thread 1: Read output and buffer it
+                    def _read_output() -> None:
+                        assert p.stdout is not None
+                        for line in p.stdout:
+                            clean = line.rstrip()
+                            if clean.startswith("[sudo]"):
+                                continue
+                            with lock:
+                                output_buffer.append(clean)
+                                if len(output_buffer) > buffer_max_size:
+                                    output_buffer.pop(0)
+                    
+                    # Thread 2: Update progress line every 5 seconds
+                    def _show_progress() -> None:
+                        spinners = ["|", "/", "-", "\\"]
+                        counter = 0
+                        progress_line_id = None
+                        
+                        while not stop_progress.is_set():
+                            spinner = spinners[counter % 4]
+                            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                            msg = f"  {timestamp} {spinner} {operation_label}..."
+                            
+                            # First time: use _log to add line
+                            # Subsequent: replace the last line
+                            if progress_line_id is None:
+                                self._log(self._s3_log, msg, "#aaaaaa")
+                                progress_line_id = "___progress___"
+                            else:
+                                # Replace last line by removing and re-adding
+                                def _replace():
+                                    try:
+                                        self._s3_log.configure(state=tk.NORMAL)
+                                        # Delete last line
+                                        line_start = self._s3_log.index("end-1c linestart")
+                                        line_end = self._s3_log.index("end-1c")
+                                        self._s3_log.delete(line_start, line_end)
+                                        # Insert new progress line
+                                        self._s3_log.insert(tk.END, msg + "\n", "")
+                                        self._s3_log.see(tk.END)
+                                        self._s3_log.configure(state=tk.DISABLED)
+                                    except tk.TclError:
+                                        pass
+                                
+                                self.root.after(0, _replace)
+                            
+                            counter += 1
+                            # Update spinner every 1 second for smooth animation
+                            if stop_progress.is_set():
+                                break
+                            time.sleep(1)
+                    
+                    # Start the threads
+                    reader_thread = threading.Thread(target=_read_output, daemon=True)
+                    progress_thread = threading.Thread(target=_show_progress, daemon=True)
+                    reader_thread.start()
+                    progress_thread.start()
+                    
+                    # Wait for process to complete
+                    p.wait()
+                    stop_progress.set()
+                    reader_thread.join(timeout=2)
+                    progress_thread.join(timeout=2)
+                    
+                    # Log final result
+                    if p.returncode == 0:
+                        self._log(self._s3_log, f"  ✓ {operation_label} erfolgreich", C_SUCCESS)
+                    else:
+                        # On error, show last N lines from buffer for debugging
+                        error_context_lines = 20
+                        self._log(self._s3_log, f"  ✗ {operation_label} fehlgeschlagen", C_DANGER)
+                        with lock:
+                            if output_buffer:
+                                self._log(self._s3_log, "", None)
+                                self._log(self._s3_log, "  — Letzte Ausgabezeilen:", "#888888")
+                                for line in output_buffer[-error_context_lines:]:
+                                    self._log(self._s3_log, f"    {line}", "#888888")
+                    
+                    return p
+
                 # ── Step 0: Ensure the shared Docker network exists ───────
                 # pos-network is declared external: true in the Compose file so
                 # Compose never manages its lifecycle.  We create it here once;
@@ -1320,9 +1606,8 @@ class InstallerApp:
                 self._log(self._s3_log, "")
                 self._log(self._s3_log,
                           "▶ sudo docker compose -f docker-compose.prod.yml pull", "#7ec8e3")
-                self._log(self._s3_log, t("s3_log_pulling"), "#aaaaaa")
 
-                pull_proc = _run_compose(["pull"])
+                pull_proc = _run_compose_with_progress(["pull"], "Docker-Images werden heruntergeladen")
                 if pull_proc is None:
                     return
                 if pull_proc.returncode != 0:
