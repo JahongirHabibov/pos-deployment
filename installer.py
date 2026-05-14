@@ -316,7 +316,7 @@ class InstallerApp:
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
             "IMAGE_UPDATER", "IMAGE_BACKUP", "DEPLOYMENT_REPO",
             "HOST_COMPOSE_PROJECT_DIR",
-            "BACKUP_UI_USER", "BACKUP_UI_PASSWORD", "TZ", "PROVISION_DONE",
+            "TZ", "PROVISION_DONE",
         ])
         mapping = {
             "image_backend":      "IMAGE_BACKEND",
@@ -326,8 +326,6 @@ class InstallerApp:
             "image_backup":       "IMAGE_BACKUP",
             "deployment_repo":    "DEPLOYMENT_REPO",
             "host_compose_dir":   "HOST_COMPOSE_PROJECT_DIR",
-            "backup_ui_user":     "BACKUP_UI_USER",
-            "backup_ui_password": "BACKUP_UI_PASSWORD",
             "tz":                 "TZ",
         }
         for data_key, env_key in mapping.items():
@@ -339,18 +337,11 @@ class InstallerApp:
             self._data["_already_prov"] = "1"
 
     def _reload_provisioned_data(self) -> None:
-        """Re-read provisioned secrets from .env into self._data after step 1.
-
-        Called after provision.py has written BACKUP_UI_PASSWORD (and other
-        secrets) to .env so that step 2 shows the pre-filled password and
-        the admin does not need to re-enter it.
-        """
+        """Re-read selected values from .env into self._data after step 1."""
         if not ENV_FILE.is_file():
             return
-        vals = _read_env_keys(["BACKUP_UI_PASSWORD", "BACKUP_UI_USER", "TZ", "PROVISION_DONE"])
+        vals = _read_env_keys(["TZ", "PROVISION_DONE"])
         for env_key, data_key in (
-            ("BACKUP_UI_PASSWORD", "backup_ui_password"),
-            ("BACKUP_UI_USER",     "backup_ui_user"),
             ("TZ",                 "tz"),
         ):
             v = vals.get(env_key, "")
@@ -555,8 +546,6 @@ class InstallerApp:
             ("_s2_user",        "ghcr_user"),
             ("_s2_token",       "ghcr_token"),
             ("_s2_sudo",        "sudo_password"),
-            ("_s2_backup_user", "backup_ui_user"),
-            ("_s2_backup_pass", "backup_ui_password"),
         ):
             if hasattr(self, attr):
                 value = getattr(self, attr).get()
@@ -1071,66 +1060,6 @@ class InstallerApp:
                                     padx=(0, 0), pady=(0, 6))
         current_row += 1
 
-        # ── Backup Section ────────────────────────────────────────────────
-        tk.Label(c, text=t("s2_backup_section"),
-                 bg="white", fg="#888", font=("Segoe UI", self._get_font_size(9), "italic"),
-                 anchor="w").grid(row=current_row, column=0, columnspan=2,
-                                  sticky="w", pady=(16, 4))
-        current_row += 1
-
-        # ── Backup UI User ────────────────────────────────────────────────
-        tk.Label(c, text=t("s2_lbl_backup_user"), bg="white",
-                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
-            row=current_row, column=0, sticky="w", pady=(4, 2))
-        self._s2_backup_user = tk.StringVar(
-            value=self._data.get("backup_ui_user", "admin"))
-        tk.Entry(c, textvariable=self._s2_backup_user, width=self._get_entry_width(53),
-                 font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1).grid(
-            row=current_row, column=1, sticky="ew", padx=(0, 0))
-        tk.Label(
-            c, text=t("s2_hint_backup_user"), bg="white", fg="#000",
-            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
-        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 6))
-        current_row += 2
-
-        # ── Backup UI Password ────────────────────────────────────────────
-        tk.Label(c, text=t("s2_lbl_backup_pass"), bg="white",
-                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
-            row=current_row, column=0, sticky="w", pady=(4, 2))
-        self._s2_backup_pass = tk.StringVar(
-            value=self._data.get("backup_ui_password", ""))
-        self._s2_backup_pass_entry = tk.Entry(
-            c, textvariable=self._s2_backup_pass, width=self._get_entry_width(53), show="*",
-            font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
-        self._s2_backup_pass_entry.grid(row=current_row, column=1, sticky="ew",
-                                        padx=(0, 0))
-        tk.Label(
-            c, text=t("s2_hint_backup_pass"), bg="white", fg="#000",
-            font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
-        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 2))
-        current_row += 2
-
-        self._s2_show_backup_pass = tk.BooleanVar(value=False)
-        tk.Checkbutton(
-            c, text=t("s2_show_backup_pass"),
-            variable=self._s2_show_backup_pass,
-            command=self._toggle_backup_pass_visibility,
-            bg="white", font=("Segoe UI", self._get_font_size(9)),
-        ).grid(row=current_row, column=1, sticky="w", padx=(0, 0), pady=(0, 6))
-        current_row += 1
-
-        # Show a note when BACKUP_UI_PASSWORD was delivered by Legisell Provisioning
-        if self._data.get("backup_ui_password"):
-            tk.Label(
-                c,
-                text=t("s2_backup_pass_provisioned"),
-                bg="#e8f5e9", fg="#2e7d32",
-                font=("Segoe UI", self._get_font_size(9), "italic"),
-                anchor="w", padx=6, pady=3,
-                relief=tk.GROOVE, bd=1,
-            ).grid(row=current_row, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-            current_row += 1
-
         self._s2_status = tk.Label(
             c, text="", bg="white", font=("Segoe UI", self._get_font_size(10)),
             wraplength=self._get_wraplength(750), justify=tk.LEFT)
@@ -1165,11 +1094,6 @@ class InstallerApp:
             show="" if self._s2_show_sudo.get() else "*"
         )
 
-    def _toggle_backup_pass_visibility(self) -> None:
-        self._s2_backup_pass_entry.configure(
-            show="" if self._s2_show_backup_pass.get() else "*"
-        )
-
     def _toggle_step3_sudo_visibility(self) -> None:
         if self._s3_sudo_entry is not None:
             self._s3_sudo_entry.configure(
@@ -1177,9 +1101,6 @@ class InstallerApp:
             )
 
     def _run_step2(self) -> None:
-        backup_user = self._s2_backup_user.get().strip() or "admin"
-        backup_pass = self._s2_backup_pass.get()
-
         # ── skip-login path ───────────────────────────────────────────────
         if self._s2_already_logged_in.get():
             found, _ = _has_ghcr_credentials()
@@ -1187,29 +1108,12 @@ class InstallerApp:
                 messagebox.showerror(t("err_title_missing"),
                                      t("s2_err_no_creds_for_skip"))
                 return
-            if not backup_pass:
-                messagebox.showerror(t("err_title_missing"),
-                                     t("s2_err_backup_pass"))
-                return
-            self._data["backup_ui_user"]     = backup_user
-            self._data["backup_ui_password"] = backup_pass
             self._btn_next.configure(state=tk.DISABLED)
             self._btn_back.configure(state=tk.DISABLED)
             self.root.after(0, lambda: self._s2_status.configure(
                 text=t("s2_log_skip_login"), fg=C_INFO))
 
             def task_skip() -> None:
-                try:
-                    _patch_env_keys({
-                        "BACKUP_UI_USER":     backup_user,
-                        "BACKUP_UI_PASSWORD": backup_pass,
-                    })
-                except OSError as exc:
-                    err_msg = f"\u2717 .env schreiben fehlgeschlagen: {exc}"
-                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
-                        text=m, fg=C_DANGER))
-                    self._set_nav(back=True, next_=True)
-                    return
                 self.root.after(0, lambda: self._s2_status.configure(
                     text=t("s2_login_ok"), fg=C_SUCCESS))
                 self.root.after(600, lambda: self._show_step(2))
@@ -1224,15 +1128,10 @@ class InstallerApp:
         if not user or not token or not sudo_password:
             messagebox.showerror(t("err_title_missing"), t("s2_err_missing"))
             return
-        if not backup_pass:
-            messagebox.showerror(t("err_title_missing"), t("s2_err_backup_pass"))
-            return
 
         self._data["ghcr_user"]          = user
         self._data["ghcr_token"]         = token
         self._data["sudo_password"]      = sudo_password
-        self._data["backup_ui_user"]     = backup_user
-        self._data["backup_ui_password"] = backup_pass
         self._btn_next.configure(state=tk.DISABLED)
         self._btn_back.configure(state=tk.DISABLED)
         self.root.after(0, lambda: self._s2_status.configure(
@@ -1260,17 +1159,6 @@ class InstallerApp:
             success  = result.returncode == 0
 
             if success:
-                try:
-                    _patch_env_keys({
-                        "BACKUP_UI_USER":     backup_user,
-                        "BACKUP_UI_PASSWORD": backup_pass,
-                    })
-                except OSError as exc:
-                    err_msg = f"\u2717 .env schreiben fehlgeschlagen: {exc}"
-                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
-                        text=m, fg=C_DANGER))
-                    self._set_nav(back=True, next_=True)
-                    return
                 try:
                     _write_pos_auth_json(user, token)
                 except OSError as exc:

@@ -88,7 +88,34 @@ def write_env(
     env_example: Path,
     env_output: Path,
 ) -> None:
-    """Copy env_example → env_output, replace matching keys, append the rest."""
+    """Copy env_example → env_output and apply provisioned values.
+
+    BACKUP_UI_PASSWORD must be provided by Legisell provisioning.
+    BACKUP_UI_USER is always enforced as "admin".
+    """
+    # Normalize API payload first so we can validate before modifying files.
+    secret_map: dict[str, str] = {}
+    for secret in secrets:
+        if not isinstance(secret, dict):
+            continue
+        key = str(secret.get("key_name", "")).strip()
+        if not key:
+            continue
+        raw_value = secret.get("value", "")
+        value = raw_value if isinstance(raw_value, str) else str(raw_value)
+        secret_map[key] = value
+
+    backup_ui_password = secret_map.get("BACKUP_UI_PASSWORD", "")
+    if not backup_ui_password:
+        print(
+            "Error: Legisell provisioning did not return BACKUP_UI_PASSWORD.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Keep backup UI user fixed and do not require manual input downstream.
+    secret_map["BACKUP_UI_USER"] = "admin"
+
     # Backup existing .env if it exists
     if env_output.is_file():
         backup_path = env_output.with_stem(f"{env_output.stem}.backup")
@@ -101,9 +128,7 @@ def write_env(
     content = env_output.read_text(encoding="utf-8")
     appended: list[str] = []
 
-    for secret in secrets:
-        key = secret["key_name"]
-        value = secret["value"]
+    for key, value in secret_map.items():
         # Replace existing KEY=... line (match KEY= at line start, any value after)
         new_content, count = re.subn(
             rf"^{re.escape(key)}=.*$",
@@ -140,6 +165,9 @@ def main() -> None:
     data = consume_token(args.api_url, args.token)
     tenant = data.get("tenant", "unknown")
     secrets = data.get("secrets", [])
+    if not isinstance(secrets, list):
+        print("Error: Invalid provisioning payload: 'secrets' must be a list.", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Received {len(secrets)} secrets for tenant: {tenant}")
 

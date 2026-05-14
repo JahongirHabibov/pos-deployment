@@ -1,145 +1,149 @@
 # POS System — Production Deployment Guide
 
-This guide walks through deploying the Point of Sale system on a customer server using Docker Compose.
+This deployment is designed to be fully automated through the GUI installer.
+Manual setup is only a fallback and is documented at the end.
 
 ---
 
-## Graphical Installation Wizard (`installer.py`)
+## Recommended: Fully Automated Setup (`installer.py`)
 
-For distributors and resellers, a guided GUI wizard is available that covers all deployment steps without requiring Docker or Linux knowledge.
+Use the launcher script:
 
 ```bash
-python3 installer.py
+chmod +x start-installer.sh
+./start-installer.sh
 ```
 
-**Step 1 — License Data & Image Tags**
+Optional fast re-deploy mode:
 
-- Enter the one-time provisioning token (OTPK) and the Legisell backend URL to fetch secrets automatically.
-- **Pre-fill from existing `.env`**: If a `.env` file is already present (e.g. on a reinstall or update), all image tag fields are filled in automatically. An info banner is shown at the top of Step 1.
-- **"Credentials were already fetched from Legisell" checkbox**: Check this on subsequent runs to skip the provisioning API call entirely. The OTPK and URL fields are disabled; only image tag fields that were changed are patched into the existing `.env`. Requires an existing `.env`.
+```bash
+./start-installer.sh --skip-setup
+```
 
-**Step 2 — Docker Registry Login**
-
-- Authenticate with GHCR using the provided username and token.
-- Backup UI credentials are pre-filled from `.env` if available.
-
-**Step 3 — Deployment**
-
-- Review the summary and launch the stack with a single click.
-
-> To skip Steps 1 & 2 (e.g. for a quick re-deploy), use `python3 installer.py --skip-setup`.
+What `start-installer.sh` does before opening the GUI:
+- Verifies Python 3.10+ is available.
+- Verifies `tkinter` is installed.
+- Verifies `installer.py` exists.
+- Launches the wizard with forwarded CLI args (including `--skip-setup`).
 
 ---
 
 ## Prerequisites
 
-- Linux server with **Docker** and **Docker Compose** installed
-- Access credentials provided by the developer/distributor or Legisell Admin:
-  - GHCR username and read-only token
-  - Legisell backend URL and a one-time provisioning token
+- Linux server with Docker and Docker Compose.
+Required input data from the developer/distributor or Legisell admin:
+- One-time provisioning token (OTPK).
+- Legisell backend URL.
+- GHCR username and token (read:packages).
+- Docker image tags (`IMAGE_*`).
 
 ---
 
-## Step 1 — Authenticate with the Private Container Registry
+## GUI Field Reference
 
-The Docker images are hosted on GitHub Container Registry (GHCR). Log in before pulling them:
+### Step 1 — License Data & Image Tags
+
+| Field | Purpose |
+|---|---|
+| Credentials were already fetched from Legisell (checkbox) | Skips provisioning API call. OTPK and URL fields are disabled. Requires an existing `.env`; only changed tag/repo/path values are patched. |
+| Provisioning Token (OTPK) | One-time token used by `provision.py` to fetch tenant secrets from Legisell. |
+| Legisell Backend URL | Target API base URL for provisioning request. |
+| IMAGE_BACKEND | Backend image tag written to `.env`. |
+| IMAGE_FRONTEND | Frontend image tag written to `.env`. |
+| IMAGE_IMAGE_SERVICE | Image service tag written to `.env`. |
+| IMAGE_UPDATER | Updater sidecar tag written to `.env`. |
+| IMAGE_BACKUP | Backup sidecar tag written to `.env`. |
+| DEPLOYMENT_REPO | Repo in `org/pos-deployment` format; used for release/tag hints and stored in `.env`. |
+| Path to pos-deployment (`HOST_COMPOSE_PROJECT_DIR`) | Absolute host path to this deployment directory; required by updater self-update and bind-mount path resolution. |
+| Timezone (`TZ`) | IANA timezone applied to containers (for logs, schedules, timestamps). |
+
+Notes:
+- If `.env` already exists, relevant fields are pre-filled automatically.
+- Recent tags are fetched automatically for `DEPLOYMENT_REPO` (display hint).
+
+### Step 2 — Docker Login
+
+| Field | Purpose |
+|---|---|
+| GHCR login already present (checkbox) | Skips `docker login` if GHCR credentials already exist in `~/.docker`. |
+| GHCR Username | Used for `docker login ghcr.io`. |
+| GHCR Token / PAT | Used as registry password input (`read:packages`). |
+| Sudo Password | Required to execute Docker commands via `sudo`. |
+| Show token / Show password checkboxes | Visibility toggles only; do not change stored values. |
+
+Notes:
+- On successful login, the installer writes `~/.docker/pos-auth.json` for updater-side GHCR pulls.
+- `BACKUP_UI_PASSWORD` is provided by Legisell provisioning (`provision.py`) and written to `.env` automatically.
+- `BACKUP_UI_USER` is fixed to `admin`.
+
+### Step 3 — Deployment
+
+| Field | Purpose |
+|---|---|
+| Sudo Password (conditional) | Only shown if no sudo password is already available from Step 2 / state. Required to run final Docker operations. |
+| Show password (checkbox) | Visibility toggle only. |
+
+This step also shows a read-only summary (API URL, GHCR user, app/port/db/image values) and live deployment logs.
+
+---
+
+## What the Installer Automates
+
+- Calls `provision.py` and generates/updates `.env`.
+- Writes `BACKUP_UI_PASSWORD` from Legisell provisioning into `.env` and uses `BACKUP_UI_USER=admin`.
+- Patches deployment keys in `.env` (`IMAGE_*`, `DEPLOYMENT_REPO`, `HOST_COMPOSE_PROJECT_DIR`, `TZ`).
+- Performs GHCR login and stores credential bridge file for updater.
+- Ensures `pos-network` exists.
+- Runs `docker compose pull` and `docker compose up -d` with live logs.
+- Stores deployment logs under `logs/deploy-<timestamp>.log`.
+
+---
+
+## Manual Setup (Short Fallback)
+
+Use this only when the GUI cannot be used.
+
+1. Log in to GHCR:
 
 ```bash
-export GHCR_USER="<your-ghcr-username>" && \
-export GHCR_TOKEN="<your-ghcr-readonly-token>" && \
+export GHCR_USER="<your-ghcr-username>"
+export GHCR_TOKEN="<your-ghcr-readonly-token>"
 echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u "$GHCR_USER" --password-stdin
 ```
 
-> All credentials are provided by the developer/distributor or the Legisell Admin.
-
----
-
-## Step 2 — Provision the `.env` File
-
-Secrets (database passwords, API keys, etc.) are managed centrally in the **Legisell License Manager**. A one-time provisioning token is generated there for each tenant and consumed by `provision.py` to populate the `.env` file automatically.
-
-### 2.1 — Run the provisioning script
+2. Provision `.env`:
 
 ```bash
-python3 provision.py \
-  --token <ONE_TIME_PROVISIONING_TOKEN> \
-  --api-url <LEGISELL_BACKEND_URL>
+python3 provision.py --token <ONE_TIME_PROVISIONING_TOKEN> --api-url <LEGISELL_BACKEND_URL>
 ```
 
-**Optional arguments:**
-
-| Argument | Default | Description |
-|---|---|---|
-| `--env-example` | `.env.example` | Path to the `.env` template file |
-| `--env-output` | `.env` | Path for the generated `.env` file |
-
-The script will:
-1. Call the Legisell API to consume the token and retrieve the secrets.
-2. Copy `.env.example` → `.env` (backing up any existing `.env`).
-3. Replace matching keys in `.env` with the provisioned values and append any additional secrets.
-
-### 2.2 — Set the Docker image tags
-
-After the `.env` file has been generated, set the correct image tags for the `IMAGE_*` variables. These values are provided by the developer/distributor:
+3. Ensure at least these values are correct in `.env`.
+`BACKUP_UI_PASSWORD` must come from the provisioning response, and `BACKUP_UI_USER` must be `admin`:
 
 ```dotenv
 IMAGE_BACKEND=ghcr.io/<org>/pos-backend:<tag>
 IMAGE_FRONTEND=ghcr.io/<org>/pos-frontend:<tag>
 IMAGE_IMAGE_SERVICE=ghcr.io/<org>/pos-image-service:<tag>
+IMAGE_UPDATER=ghcr.io/<org>/pos-updater:<tag>
+IMAGE_BACKUP=ghcr.io/<org>/pos-backup:<tag>
+DEPLOYMENT_REPO=<org>/pos-deployment
+HOST_COMPOSE_PROJECT_DIR=/absolute/path/to/pos-deployment
+TZ=Europe/Berlin
+BACKUP_UI_USER=admin
+BACKUP_UI_PASSWORD=<from-provisioning-secret>
 ```
 
-Open `.env` with any text editor and update these values accordingly.
-
----
-
-## Step 3 — Start the Stack
-
-Once the `.env` file is complete, bring up all services:
+4. Start services:
 
 ```bash
+sudo docker network create --driver bridge pos-network || true
+sudo docker compose -f docker-compose.prod.yml pull
 sudo docker compose -f docker-compose.prod.yml up -d
 ```
 
-Docker Compose will start the following services:
-
-| Service | Description |
-|---|---|
-| `pos-database` | PostgreSQL 17 — persistent data storage |
-| `pos-redis` | Redis 8 — caching layer |
-| `pos-backend` | FastAPI application server |
-| `pos-frontend` | React PWA served via Nginx (public entry point) |
-| `pos-image-service` | Image upload & thumbnail service |
-
-The frontend is accessible on the port defined by `POS_PUBLIC_PORT` in `.env`.
-
----
-
-## Useful Commands
+5. Verify:
 
 ```bash
-# View running containers and their status
 sudo docker compose -f docker-compose.prod.yml ps
-
-# Follow logs for all services
 sudo docker compose -f docker-compose.prod.yml logs -f
-
-# Follow logs for a specific service (e.g. backend)
-sudo docker compose -f docker-compose.prod.yml logs -f backend
-
-# Stop the stack (data is preserved in Docker volumes)
-sudo docker compose -f docker-compose.prod.yml down
-
-# Stop and remove all data volumes (destructive — use with caution)
-sudo docker compose -f docker-compose.prod.yml down -v
 ```
-
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Resolution |
-|---|---|---|
-| `pull access denied` on docker compose up | Not logged in to GHCR or token expired | Repeat Step 1 |
-| `API request failed (HTTP 401/403)` from provision.py | Invalid or already-consumed provisioning token | Request a new token from the Legisell Admin |
-| Container exits immediately | Missing or incorrect values in `.env` | Check `docker compose logs <service>` and verify `.env` |
-| Frontend unreachable | `POS_PUBLIC_PORT` blocked by firewall | Open the configured port in the server firewall/security group |
