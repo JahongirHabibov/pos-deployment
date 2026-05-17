@@ -11,7 +11,7 @@
   "s1_title": "Шаг 1 — Данные лицензии и теги образов",
   "s1_desc": "Введите одноразовый токен (OTPK) и URL Legisell.\nТеги образов предоставляются владельцем Legisell вместе с OTPK.",
   "s1_lbl_otpk": "Токен (OTPK):",
-  "s1_lbl_url": "URL Legisell Backend:",
+  "s1_lbl_url": "Legisell Pub-API URL:",
   "s1_lbl_output": "Вывод:",
   "s1_err_missing": "Пожалуйста, заполните все поля.",
   "s1_log_connecting": "Подключение к {url} …",
@@ -88,7 +88,7 @@
   "s1_lbl_host_compose_dir": "Путь к pos-deployment:",
 
   "s1_hint_otpk": "Одноразовый ключ активации от владельца Legisell.",
-  "s1_hint_url": "Полный URL Legisell-бэкенда, например https://admin.legisell.de",
+  "s1_hint_url": "Полный URL Legisell Pub-API, например https://api.legisell.de:8443",
   "s1_hint_image_backend": "Тег Docker-образа для бэкенда, например ghcr.io/org/pos-backend:1.2.3",
   "s1_hint_image_frontend": "Тег Docker-образа для фронтенд-сервиса.",
   "s1_hint_image_service": "Тег Docker-образа для сервиса загрузки изображений.",

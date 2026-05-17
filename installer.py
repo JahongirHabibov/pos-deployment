@@ -671,6 +671,18 @@ class InstallerApp:
             justify=tk.LEFT,
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
+        # ── Release versions box (top) ────────────────────────────────────
+        self._s1_tags_frame = tk.Frame(c, bg="#e8f5e9", relief=tk.GROOVE, bd=1)
+        self._s1_tags_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self._s1_tags_frame.grid_remove()
+        self._s1_tags_hint = tk.Label(
+            self._s1_tags_frame, text="", bg="#e8f5e9", fg="#1b5e20",
+            font=("Segoe UI", self._get_font_size(9), "bold"),
+            anchor="w", padx=8, pady=4,
+        )
+        self._s1_tags_hint.pack(fill=tk.X)
+        self._s1_tags_fetch_after_id: str | None = None
+
         # ── Idee 2: info banner when .env already exists ──────────────────
         if ENV_FILE.is_file():
             tk.Label(
@@ -680,7 +692,7 @@ class InstallerApp:
                 font=("Segoe UI", self._get_font_size(9), "italic"),
                 anchor="w", padx=6, pady=3,
                 relief=tk.GROOVE, bd=1,
-            ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+            ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 6))
 
         # ── Idee 1: "already provisioned" checkbox ────────────────────────
         self._s1_already_prov = tk.BooleanVar(
@@ -693,7 +705,7 @@ class InstallerApp:
             command=self._toggle_provision_mode,
             bg="white", font=("Segoe UI", self._get_font_size(9)),
             anchor="w",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
         fields = [
             ("otpk",             t("s1_lbl_otpk"),              False, "s1_hint_otpk"),
@@ -710,7 +722,7 @@ class InstallerApp:
         self._s1_entry_otpk: tk.Entry | None = None
         self._s1_entry_api_url: tk.Entry | None = None
         
-        current_row = 4
+        current_row = 5
         for key, label, secret, hint_key in fields:
             tk.Label(c, text=label, bg="white", anchor="w",
                      font=("Segoe UI", self._get_font_size(10), "bold"), width=30).grid(
@@ -735,14 +747,6 @@ class InstallerApp:
                 self._s1_entry_api_url = entry
             
             current_row += 2
-
-        self._s1_tags_hint = tk.Label(
-            c, text="", bg="white", fg="#0288d1",
-            font=("Segoe UI", self._get_font_size(9)), anchor="nw",
-        )
-        self._s1_tags_hint.grid(row=current_row, column=1, sticky="ew", pady=(6, 0))
-        self._s1_tags_fetch_after_id: str | None = None
-        current_row += 1
 
         # ── Timezone (TZ) ─────────────────────────────────────────────────
         tk.Label(c, text=t("s1_lbl_tz"), bg="white", anchor="w",
@@ -775,7 +779,8 @@ class InstallerApp:
             repo = self._s1_vars["deployment_repo"].get().strip()
             if repo and "/" in repo:
                 self._s1_tags_hint.configure(
-                    text=t("s1_hint_fetching"), fg="#0288d1")
+                    text=t("s1_hint_fetching"), fg="#555555")
+                self._s1_tags_frame.grid()
                 self._s1_tags_fetch_after_id = self.root.after(
                     800,
                     lambda r=repo: threading.Thread(
@@ -785,6 +790,7 @@ class InstallerApp:
                 )
             else:
                 self._s1_tags_hint.configure(text="")
+                self._s1_tags_frame.grid_remove()
 
         self._s1_vars["deployment_repo"].trace_add("write", _on_repo_change)
         # Trigger immediately if a value is already present
@@ -828,10 +834,12 @@ class InstallerApp:
                 return
             if tags:
                 hint = t("s1_recent_tags_label") + "  " + "  ·  ".join(tags)
-                self._s1_tags_hint.configure(text=hint, fg="#1565c0")
+                self._s1_tags_hint.configure(text=hint, fg="#1b5e20")
+                if hasattr(self, "_s1_tags_frame") and self._s1_tags_frame.winfo_exists():
+                    self._s1_tags_frame.grid()
             else:
                 self._s1_tags_hint.configure(
-                    text=t("s1_hint_fetch_err"), fg="#bbb")
+                    text=t("s1_hint_fetch_err"), fg="#9e9e9e")
 
         self.root.after(0, _update)
 

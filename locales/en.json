@@ -11,7 +11,7 @@
   "s1_title": "Step 1 — License Data & Image Tags",
   "s1_desc": "Enter the one-time provisioning token (OTPK) and the Legisell URL.\nThe image tags are provided by the Legisell owner together with the OTPK.",
   "s1_lbl_otpk": "Provisioning Token (OTPK):",
-  "s1_lbl_url": "Legisell Backend URL:",
+  "s1_lbl_url": "Legisell Pub-API URL:",
   "s1_lbl_output": "Output:",
   "s1_err_missing": "Please fill in all fields.",
   "s1_log_connecting": "Connecting to {url} …",
@@ -88,7 +88,7 @@
   "s1_lbl_host_compose_dir": "Path to pos-deployment:",
 
   "s1_hint_otpk": "One-time activation key provided by the Legisell owner.",
-  "s1_hint_url": "Full URL of the Legisell backend, e.g. https://admin.legisell.de",
+  "s1_hint_url": "Full URL of the Legisell Pub-API, e.g. https://api.legisell.de:8443",
   "s1_hint_image_backend": "Docker image tag for the backend, e.g. ghcr.io/org/pos-backend:1.2.3",
   "s1_hint_image_frontend": "Docker image tag for the frontend service.",
   "s1_hint_image_service": "Docker image tag for the image upload service.",
