@@ -1472,32 +1472,6 @@ class InstallerApp:
                     
                     return p
 
-                # ── Step 0: Ensure the shared Docker network exists ───────
-                # pos-network is declared external: true in the Compose file so
-                # Compose never manages its lifecycle.  We create it here once;
-                # the call is idempotent — if the network already exists the
-                # daemon returns an error that we deliberately ignore.
-                self._log(self._s3_log,
-                          "▶ sudo docker network create pos-network", "#7ec8e3")
-                net_proc = subprocess.run(
-                    ["sudo", "-k", "-S", "docker", "network", "create",
-                     "--driver", "bridge", "pos-network"],
-                    input=sudo_password + "\n",
-                    text=True,
-                    capture_output=True,
-                    cwd=str(REPO_DIR),
-                    env=env,
-                )
-                # Exit code 1 with "already exists" is expected on re-installs.
-                if net_proc.returncode == 0:
-                    self._log(self._s3_log, "  Network pos-network created.", "#aaaaaa")
-                else:
-                    err = (net_proc.stderr or "").strip()
-                    if "already exists" in err:
-                        self._log(self._s3_log, "  Network pos-network already exists — OK.", "#aaaaaa")
-                    else:
-                        self._log(self._s3_log, f"  Warning: {err}", C_DANGER)
-
                 # ── Step 1: Pull latest images ────────────────────────────
                 self._log(self._s3_log, "")
                 self._log(self._s3_log,
