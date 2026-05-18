@@ -80,6 +80,8 @@ services:
       - /dev/bus/usb:/dev/bus/usb
     group_add:
       - lp
+    volumes:
+      - /etc/machine-id:/etc/machine-id:ro  # stable host identity for license hardware binding
     security_opt:
       - no-new-privileges:true
     # Port not exposed: all traffic enters via the frontend Nginx on port 80
