@@ -74,14 +74,44 @@ services:
     read_only: true
     tmpfs:
       - /tmp:mode=1777,size=100m
-    # USB printer device passthrough — mirrors dev compose.
-    # Requires udev rule on host: SUBSYSTEM=="usb", GROUP="lp", MODE="0664"
+    # Printer device passthrough — no privileged mode needed.
+    #
+    # /dev/bus/usb  → raw USB bus access (libusb, usbip)
+    #
+    # device_cgroup_rules grant cgroup write access by major number:
+    #   c 6:*    /dev/lp*       — parallel-port / integrated printer (legacy)
+    #   c 166:*  /dev/ttyACM*   — USB CDC-ACM serial printers
+    #   c 180:*  /dev/usb/lp*   — USB thermal printers via usblp kernel module
+    #   c 188:*  /dev/ttyUSB*   — USB-to-serial adapter printers
+    #
+    # For /dev/lp*, /dev/ttyUSB*, /dev/ttyACM*: add the specific node under
+    # `devices:` once the path is known, OR use the host udev rule below to
+    # symlink them into /dev/usb/ so the bind-mount picks them up automatically.
+    #
+    # Host udev rules (create /etc/udev/rules.d/99-pos-printer.rules):
+    #   SUBSYSTEM=="usb", ATTRS{bInterfaceClass}=="07", GROUP="lp", MODE="0664"
+    #   KERNEL=="lp[0-9]*", GROUP="lp", MODE="0664"
+    #   KERNEL=="ttyUSB[0-9]*", GROUP="lp", MODE="0664"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+    device_cgroup_rules:
+      - 'c 6:* rmw'
+      - 'c 166:* rmw'
+      - 'c 180:* rmw'
+      - 'c 188:* rmw'
     group_add:
       - lp
     volumes:
       - /etc/machine-id:/etc/machine-id:ro  # stable host identity for license hardware binding
+      # /dev/usb bind-mount with shared propagation so that /dev/usb/lp* nodes
+      # created by udev AFTER container start are immediately visible inside.
+      # create_host_path: true — no failure if /dev/usb doesn't exist yet.
+      - type: bind
+        source: /dev/usb
+        target: /dev/usb
+        bind:
+          propagation: shared
+          create_host_path: true
     security_opt:
       - no-new-privileges:true
     # Port not exposed: all traffic enters via the frontend Nginx on port 80
