@@ -71,6 +71,17 @@ services:
     environment:
       APP_ENV: production
       DEBUG: "false"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=100m
+    # USB printer device passthrough — mirrors dev compose.
+    # Requires udev rule on host: SUBSYSTEM=="usb", GROUP="lp", MODE="0664"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    group_add:
+      - lp
+    security_opt:
+      - no-new-privileges:true
     # Port not exposed: all traffic enters via the frontend Nginx on port 80
     networks:
       - pos-network
@@ -131,6 +142,8 @@ services:
       retries: 3
       start_period: 10s
     logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
 
   # ===========================================================================
   # UPDATER SIDECAR — System-Update über Admin-UI
@@ -168,6 +181,9 @@ services:
       start_period: 10s
     logging: *default-logging
     # KEIN ports: — Updater ist nur intern über pos-network erreichbar!
+    security_opt:
+      - no-new-privileges:true
+
 
   # ===========================================================================
   # BACKUP SIDECAR — Automatische PostgreSQL-Dumps + Web-UI (Port 8300)
@@ -194,6 +210,8 @@ services:
       retries: 3
       start_period: 15s
     logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
 
 # =============================================================================
 # VOLUMES
