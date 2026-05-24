@@ -190,13 +190,20 @@ services:
       - ./.env:/app/deployment/.env:rw
       - ./docker-compose.prod.yml:/app/deployment/docker-compose.prod.yml:ro
       - ./updater-state:/app/state
-      - ~/.docker/pos-auth.json:/root/.docker/config.json:ro
+      - type: bind
+        source: ${POS_DOCKER_AUTH_FILE:?Run the installer Docker Login step to set POS_DOCKER_AUTH_FILE}
+        target: /root/.docker/config.json
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-point-of-sale-prod}
       - DEPLOYMENT_REPO=${DEPLOYMENT_REPO}
       - MANAGED_SERVICES=backend,frontend,image-service
       - DEPLOYMENT_ENV=/app/deployment/.env
       - COMPOSE_FILE=/app/deployment/docker-compose.prod.yml
+      - DOCKER_CONFIG=/root/.docker
+      - HOST_DOCKER_AUTH_CONFIG_FILE=${POS_DOCKER_AUTH_FILE}
       - HOST_COMPOSE_PROJECT_DIR=${HOST_COMPOSE_PROJECT_DIR}
       - DRY_RUN=${DRY_RUN:-false}
       - DRY_RUN_NEXT_VERSION=${DRY_RUN_NEXT_VERSION:-}

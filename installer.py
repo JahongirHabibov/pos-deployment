@@ -126,6 +126,105 @@ def set_lang(code: str) -> None:
     _LANG = code
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+class AuthFileError(Exception):
+    """User-facing validation error for Docker auth bridge files."""
+
+    def __init__(self, message_key: str, path: Path, detail: str = "") -> None:
+        super().__init__(message_key)
+        self.message_key = message_key
+        self.path = path
+        self.detail = detail
+
+    def translated(self) -> str:
+        return t(self.message_key, path=str(self.path), detail=self.detail)
+
+
+def _ghcr_auth_entry_present(data: object) -> bool:
+    if not isinstance(data, dict):
+        return False
+    auths = data.get("auths", {})
+    if not isinstance(auths, dict):
+        return False
+    ghcr = auths.get("ghcr.io")
+    if not isinstance(ghcr, dict):
+        return False
+    return bool(ghcr.get("auth") or ghcr.get("identitytoken"))
+
+
+def _validate_ghcr_auth_file(path: Path) -> None:
+    """Validate that *path* is a Docker config JSON with GHCR credentials."""
+    if not path.exists():
+        raise AuthFileError("s2_auth_file_missing", path)
+    if path.is_dir():
+        raise AuthFileError("s2_auth_file_is_directory", path)
+    if not path.is_file():
+        raise AuthFileError("s2_auth_file_not_file", path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise AuthFileError("s2_auth_file_invalid_json", path, str(exc)) from exc
+    except OSError as exc:
+        raise AuthFileError("s2_auth_file_unreadable", path, str(exc)) from exc
+    if not _ghcr_auth_entry_present(data):
+        raise AuthFileError("s2_auth_file_missing_ghcr", path)
+
+
+def _find_ghcr_auth_file() -> tuple[Path | None, AuthFileError | None]:
+    """Return a usable GHCR auth file, preferring the updater bridge file."""
+    first_error: AuthFileError | None = None
+    for path in (POS_AUTH_FILE, Path.home() / ".docker" / "config.json"):
+        try:
+            _validate_ghcr_auth_file(path)
+            return path, None
+        except AuthFileError as exc:
+            if path == POS_AUTH_FILE and path.exists():
+                return None, exc
+            if first_error is None and path.exists():
+                first_error = exc
+    return None, first_error
+
+
+def _patch_auth_file_env(path: Path) -> None:
+    _patch_env_keys({"POS_DOCKER_AUTH_FILE": str(path.expanduser().resolve())})
+
+
+def _ensure_deployment_auth_file(env: dict) -> Path:
+    """Ensure compose receives an absolute, valid GHCR auth JSON path."""
+    configured = str(env.get("POS_DOCKER_AUTH_FILE", "")).strip()
+    if configured:
+        auth_path = Path(configured).expanduser()
+        if not auth_path.is_absolute():
+            raise AuthFileError("s3_auth_file_not_absolute", auth_path)
+    else:
+        found, error = _find_ghcr_auth_file()
+        if found is None:
+            raise error or AuthFileError("s2_auth_file_missing", POS_AUTH_FILE)
+        auth_path = found
+
+    _validate_ghcr_auth_file(auth_path)
+    auth_path = auth_path.resolve()
+    _patch_auth_file_env(auth_path)
+    env["POS_DOCKER_AUTH_FILE"] = str(auth_path)
+    return auth_path
+
+
+def _prepare_pos_auth_file_for_write() -> None:
+    POS_AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if not POS_AUTH_FILE.exists():
+        return
+    if POS_AUTH_FILE.is_dir():
+        try:
+            POS_AUTH_FILE.rmdir()
+        except OSError as exc:
+            raise AuthFileError(
+                "s2_auth_file_directory_not_empty",
+                POS_AUTH_FILE,
+                str(exc),
+            ) from exc
+        return
+    if not POS_AUTH_FILE.is_file():
+        raise AuthFileError("s2_auth_file_not_file", POS_AUTH_FILE)
+
 def _write_pos_auth_json(user: str, token: str) -> None:
     """Write ~/.docker/pos-auth.json with base64 auth for ghcr.io.
 
@@ -133,13 +232,14 @@ def _write_pos_auth_json(user: str, token: str) -> None:
     as /root/.docker/config.json so it can pull images from GHCR
     without needing access to docker-credential-desktop.exe.
     """
-    POS_AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _prepare_pos_auth_file_for_write()
     auth_b64 = base64.b64encode(f"{user}:{token}".encode()).decode()
     data = {"auths": {"ghcr.io": {"auth": auth_b64}}}
     POS_AUTH_FILE.write_text(
         json.dumps(data, indent=2) + "\n", encoding="utf-8"
     )
     POS_AUTH_FILE.chmod(0o600)
+    _validate_ghcr_auth_file(POS_AUTH_FILE)
 
 
 def _fetch_recent_tags(repo: str, n: int = 4) -> list[str]:
@@ -179,15 +279,8 @@ def _has_ghcr_credentials() -> tuple[bool, str]:
     Only plain ``auths`` entries are considered; credential-helper entries
     are not decoded (no plain-text token available in that case).
     """
-    for path in (POS_AUTH_FILE, Path.home() / ".docker" / "config.json"):
-        if path.is_file():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if "ghcr.io" in data.get("auths", {}):
-                    return True, str(path)
-            except (json.JSONDecodeError, OSError):
-                pass
-    return False, ""
+    path, _ = _find_ghcr_auth_file()
+    return (True, str(path)) if path else (False, "")
 
 
 def _read_env_keys(keys: list[str]) -> dict[str, str]:
@@ -1111,10 +1204,14 @@ class InstallerApp:
     def _run_step2(self) -> None:
         # ── skip-login path ───────────────────────────────────────────────
         if self._s2_already_logged_in.get():
-            found, _ = _has_ghcr_credentials()
-            if not found:
-                messagebox.showerror(t("err_title_missing"),
-                                     t("s2_err_no_creds_for_skip"))
+            auth_path, auth_error = _find_ghcr_auth_file()
+            if auth_path is None:
+                messagebox.showerror(
+                    t("err_title_missing"),
+                    auth_error.translated()
+                    if auth_error
+                    else t("s2_err_no_creds_for_skip"),
+                )
                 return
             self._btn_next.configure(state=tk.DISABLED)
             self._btn_back.configure(state=tk.DISABLED)
@@ -1122,6 +1219,14 @@ class InstallerApp:
                 text=t("s2_log_skip_login"), fg=C_INFO))
 
             def task_skip() -> None:
+                try:
+                    _patch_auth_file_env(auth_path)
+                except OSError as exc:
+                    err_msg = t("s2_auth_file_env_err", exc=str(exc))
+                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
+                        text=m, fg=C_DANGER))
+                    self._set_nav(back=True, next_=True)
+                    return
                 self.root.after(0, lambda: self._s2_status.configure(
                     text=t("s2_login_ok"), fg=C_SUCCESS))
                 self.root.after(600, lambda: self._show_step(2))
@@ -1169,8 +1274,22 @@ class InstallerApp:
             if success:
                 try:
                     _write_pos_auth_json(user, token)
+                except AuthFileError as exc:
+                    err_msg = exc.translated()
+                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
+                        text=m, fg=C_DANGER))
+                    self._set_nav(back=True, next_=True)
+                    return
                 except OSError as exc:
                     err_msg = t("s2_auth_file_err", exc=str(exc))
+                    self.root.after(0, lambda m=err_msg: self._s2_status.configure(
+                        text=m, fg=C_DANGER))
+                    self._set_nav(back=True, next_=True)
+                    return
+                try:
+                    _patch_auth_file_env(POS_AUTH_FILE)
+                except OSError as exc:
+                    err_msg = t("s2_auth_file_env_err", exc=str(exc))
                     self.root.after(0, lambda m=err_msg: self._s2_status.configure(
                         text=m, fg=C_DANGER))
                     self._set_nav(back=True, next_=True)
@@ -1309,6 +1428,26 @@ class InstallerApp:
                 # Ensure required host directories exist for bind mounts
                 subprocess.run(["mkdir", "-p", str(REPO_DIR / "updater-state")], check=False)
                 subprocess.run(["mkdir", "-p", str(REPO_DIR / "backups")], check=False)
+
+                try:
+                    auth_path = _ensure_deployment_auth_file(env)
+                    self._log(
+                        self._s3_log,
+                        t("s3_auth_file_ok", path=str(auth_path)),
+                        C_SUCCESS,
+                    )
+                except AuthFileError as exc:
+                    self._log(self._s3_log, exc.translated(), C_DANGER)
+                    self._set_nav(back=True, next_=True)
+                    return
+                except OSError as exc:
+                    self._log(
+                        self._s3_log,
+                        t("s2_auth_file_env_err", exc=str(exc)),
+                        C_DANGER,
+                    )
+                    self._set_nav(back=True, next_=True)
+                    return
 
                 sudo_password = self._data.get("sudo_password", "")
 

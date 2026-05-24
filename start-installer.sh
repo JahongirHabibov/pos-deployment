@@ -10,7 +10,8 @@
 # What this script does:
 #   1. Verifies that Python 3.10+ is available
 #   2. Verifies that the Tkinter GUI library is available
-#   3. Launches installer.py
+#   3. Verifies that installer.py exists in the same directory
+#   4. Launches installer.py
 # ──────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail

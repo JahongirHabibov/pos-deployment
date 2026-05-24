@@ -23,7 +23,7 @@ chmod +x start-installer.sh
 Что `start-installer.sh` делает перед запуском GUI:
 - Проверяет наличие Python 3.10+.
 - Проверяет наличие модуля `tkinter`.
-- Проверяет, что `installer.py` существует.
+- Проверяет, что `installer.py` существует в том же каталоге.
 - Запускает мастер и передаёт ему аргументы CLI (включая `--skip-setup`).
 
 ---
@@ -73,6 +73,9 @@ chmod +x start-installer.sh
 
 Примечания:
 - При успешном входе создаётся `~/.docker/pos-auth.json` для GHCR-пулла образов обновлятором.
+- Инсталлятор записывает `POS_DOCKER_AUTH_FILE` в `.env` с абсолютным Linux-путём к этому файлу.
+- GUI не показывает это поле для ручного ввода; это техническое значение управляется инсталлятором.
+- Compose больше не создаёт этот путь автоматически; если файл отсутствует или является папкой, повторите Docker Login в инсталляторе.
 - `BACKUP_UI_PASSWORD` приходит из Legisell Provisioning (`provision.py`) и автоматически записывается в `.env`.
 - `BACKUP_UI_USER` фиксирован и равен `admin`.
 
@@ -93,8 +96,8 @@ chmod +x start-installer.sh
 - Записывает `BACKUP_UI_PASSWORD` из Legisell Provisioning в `.env` и использует `BACKUP_UI_USER=admin`.
 - Патчит ключи деплоя в `.env` (`IMAGE_*`, `DEPLOYMENT_REPO`, `HOST_COMPOSE_PROJECT_DIR`, `TZ`).
 - Выполняет GHCR login и сохраняет bridge-файл учётных данных для обновлятора.
-- Гарантирует наличие сети `pos-network`.
-- Запускает `docker compose pull` и `docker compose up -d` с live-логом.
+- Сеть `pos-network` создаётся автоматически через Docker Compose на основе `docker-compose.prod.yml` — отдельный шаг создания не требуется.
+- Запускает `docker compose pull` с индикатором прогресса (вывод буферизуется внутри, построчный лог не отображается) и `docker compose up -d` с live-логом.
 - Сохраняет лог развёртывания в `logs/deploy-<timestamp>.log`.
 
 ---
@@ -109,7 +112,10 @@ chmod +x start-installer.sh
 export GHCR_USER="<ваш-ghcr-пользователь>"
 export GHCR_TOKEN="<ваш-ghcr-readonly-токен>"
 echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u "$GHCR_USER" --password-stdin
+python3 -c 'import base64,json,os,pathlib; p=pathlib.Path.home()/".docker"/"pos-auth.json"; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps({"auths":{"ghcr.io":{"auth":base64.b64encode((os.environ["GHCR_USER"]+":"+os.environ["GHCR_TOKEN"]).encode()).decode()}}}, indent=2)+"\n"); p.chmod(0o600)'
 ```
+
+Файл `pos-auth.json` — это bridge-файл для обновлятора в WSL/Docker Desktop. Он должен быть обычным файлом, а не папкой.
 
 2. Выполните провизию `.env`:
 
@@ -128,10 +134,13 @@ IMAGE_UPDATER=ghcr.io/<org>/pos-updater:<tag>
 IMAGE_BACKUP=ghcr.io/<org>/pos-backup:<tag>
 DEPLOYMENT_REPO=<org>/pos-deployment
 HOST_COMPOSE_PROJECT_DIR=/absolute/path/to/pos-deployment
+POS_DOCKER_AUTH_FILE=/home/<user>/.docker/pos-auth.json
 TZ=Europe/Berlin
 BACKUP_UI_USER=admin
 BACKUP_UI_PASSWORD=<from-provisioning-secret>
 ```
+
+Для `POS_DOCKER_AUTH_FILE` используйте абсолютный Linux-путь; не используйте `~` в `.env`. При установке через GUI это значение записывает сам инсталлятор.
 
 4. Запустите сервисы:
 

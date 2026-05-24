@@ -116,14 +116,40 @@ def write_env(
     # Keep backup UI user fixed and do not require manual input downstream.
     secret_map["BACKUP_UI_USER"] = "admin"
 
-    # Backup existing .env if it exists
-    if env_output.is_file():
+    is_upgrade = env_output.is_file()
+
+    if is_upgrade:
+        # Upgrade: preserve existing .env, only add missing keys
         backup_path = env_output.with_stem(f"{env_output.stem}.backup")
         shutil.copy2(env_output, backup_path)
         print(f"Backed up existing {env_output} → {backup_path}")
-    
-    shutil.copy2(env_example, env_output)
-    print(f"Copied {env_example} → {env_output}")
+
+        existing_content = env_output.read_text(encoding="utf-8")
+        existing_keys = {
+            line.partition("=")[0].strip()
+            for line in existing_content.splitlines()
+            if line.strip() and not line.strip().startswith("#") and "=" in line
+        }
+        template_lines = env_example.read_text(encoding="utf-8").splitlines()
+        missing_lines = [
+            line for line in template_lines
+            if line.strip()
+            and not line.strip().startswith("#")
+            and "=" in line
+            and line.partition("=")[0].strip() not in existing_keys
+        ]
+        if missing_lines:
+            with env_output.open("a", encoding="utf-8") as f:
+                f.write("\n# ── New vars added by installer update ──────────────\n")
+                for line in missing_lines:
+                    f.write(f"{line}\n")
+            print(f"  Added {len(missing_lines)} new key(s) from updated template.")
+        else:
+            print("  No new keys in updated template.")
+    else:
+        # Fresh install: copy template as base
+        shutil.copy2(env_example, env_output)
+        print(f"Copied {env_example} → {env_output}")
 
     content = env_output.read_text(encoding="utf-8")
     appended: list[str] = []
