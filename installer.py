@@ -409,7 +409,7 @@ class InstallerApp:
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
             "IMAGE_UPDATER", "IMAGE_BACKUP", "DEPLOYMENT_REPO",
             "HOST_COMPOSE_PROJECT_DIR",
-            "TZ", "PROVISION_DONE",
+            "TZ", "PROVISION_DONE", "POS_WSL2",
         ])
         mapping = {
             "image_backend":      "IMAGE_BACKEND",
@@ -428,12 +428,14 @@ class InstallerApp:
         # Auto-check "skip provisioning" if PROVISION_DONE=true
         if env_vals.get("PROVISION_DONE", "").lower() == "true":
             self._data["_already_prov"] = "1"
+        if env_vals.get("POS_WSL2", "").lower() == "true":
+            self._data["wsl2"] = "1"
 
     def _reload_provisioned_data(self) -> None:
         """Re-read selected values from .env into self._data after step 1."""
         if not ENV_FILE.is_file():
             return
-        vals = _read_env_keys(["TZ", "PROVISION_DONE"])
+        vals = _read_env_keys(["TZ", "PROVISION_DONE", "POS_WSL2"])
         for env_key, data_key in (
             ("TZ",                 "tz"),
         ):
@@ -443,6 +445,8 @@ class InstallerApp:
         # Auto-check "skip provisioning" if PROVISION_DONE=true
         if vals.get("PROVISION_DONE", "").lower() == "true":
             self._data["_already_prov"] = "1"
+        if vals.get("POS_WSL2", "").lower() == "true":
+            self._data["wsl2"] = "1"
 
     # ── Chrome (header + step indicator + nav bar) ────────────────────────────
 
@@ -633,6 +637,8 @@ class InstallerApp:
                 self._data["tz"] = tz_val
         if hasattr(self, "_s1_already_prov"):
             self._data["_already_prov"] = "1" if self._s1_already_prov.get() else ""
+        if hasattr(self, "_s1_wsl2"):
+            self._data["wsl2"] = "1" if self._s1_wsl2.get() else ""
 
     def _save_step2_state(self) -> None:
         for attr, data_key in (
@@ -798,7 +804,20 @@ class InstallerApp:
             command=self._toggle_provision_mode,
             bg="white", font=("Segoe UI", self._get_font_size(9)),
             anchor="w",
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+        # ── WSL 2 / Docker without Sudo checkbox ─────────────────────────
+        self._s1_wsl2 = tk.BooleanVar(
+            value=bool(self._data.get("wsl2"))
+        )
+        self._s1_wsl2_btn = tk.Checkbutton(
+            c,
+            text=t("s1_chk_wsl2"),
+            variable=self._s1_wsl2,
+            bg="white", font=("Segoe UI", self._get_font_size(9)),
+            anchor="w",
+        )
+        self._s1_wsl2_btn.grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
         fields = [
             ("otpk",             t("s1_lbl_otpk"),              False, "s1_hint_otpk"),
@@ -815,7 +834,7 @@ class InstallerApp:
         self._s1_entry_otpk: tk.Entry | None = None
         self._s1_entry_api_url: tk.Entry | None = None
         
-        current_row = 5
+        current_row = 6
         for key, label, secret, hint_key in fields:
             tk.Label(c, text=label, bg="white", anchor="w",
                      font=("Segoe UI", self._get_font_size(10), "bold"), width=30).grid(
@@ -973,7 +992,11 @@ class InstallerApp:
 
             def task_skip() -> None:
                 self._log(self._s1_log, t("s1_log_skip_provision"), C_INFO)
-                patch_full = {**patch, "TZ": tz_value}
+                patch_full = {
+                    **patch,
+                    "TZ": tz_value,
+                    "POS_WSL2": "true" if self._s1_wsl2.get() else "false"
+                }
                 try:
                     _patch_env_keys(patch_full)
                     self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
@@ -1037,6 +1060,7 @@ class InstallerApp:
                     "HOST_COMPOSE_PROJECT_DIR":  vals["host_compose_dir"],
                     "TZ":                        tz_value,
                     "PROVISION_DONE":            "true",
+                    "POS_WSL2":                  "true" if self._s1_wsl2.get() else "false",
                 })
                 self._log(self._s1_log, t("s1_log_tags_ok"), C_SUCCESS)
             except Exception as exc:  # noqa: BLE001
@@ -1136,18 +1160,19 @@ class InstallerApp:
         current_row += 1
 
         # ── Sudo Password ──────────────────────────────────────────────────
-        tk.Label(c, text=t("s2_lbl_sudo"), bg="white",
-                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
-            row=current_row, column=0, sticky="w", pady=(4, 2))
+        self._s2_sudo_label = tk.Label(c, text=t("s2_lbl_sudo"), bg="white",
+                 font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w")
+        self._s2_sudo_label.grid(row=current_row, column=0, sticky="w", pady=(4, 2))
         self._s2_sudo = tk.StringVar(value=self._data.get("sudo_password", ""))
         self._s2_sudo_entry = tk.Entry(
             c, textvariable=self._s2_sudo, width=self._get_entry_width(53), show="*",
             font=("Segoe UI", self._get_font_size(10)), relief=tk.SOLID, bd=1)
         self._s2_sudo_entry.grid(row=current_row, column=1, sticky="ew", padx=(0, 0))
-        tk.Label(
+        self._s2_sudo_hint = tk.Label(
             c, text=t("s2_hint_sudo"), bg="white", fg="#000",
             font=("Segoe UI", self._get_font_size(9)), wraplength=self._get_wraplength(550), anchor="nw",
-        ).grid(row=current_row+1, column=1, sticky="ew", pady=(0, 2))
+        )
+        self._s2_sudo_hint.grid(row=current_row+1, column=1, sticky="ew", pady=(0, 2))
         current_row += 2
 
         self._s2_show_sudo = tk.BooleanVar(value=False)
@@ -1171,6 +1196,13 @@ class InstallerApp:
         # Apply initial toggle state
         if self._s2_already_logged_in.get():
             self._toggle_login_mode()
+
+        # Hide sudo password widgets if WSL 2 mode is active
+        if bool(self._data.get("wsl2")):
+            self._s2_sudo_label.grid_remove()
+            self._s2_sudo_entry.grid_remove()
+            self._s2_sudo_hint.grid_remove()
+            self._s2_show_sudo_btn.grid_remove()
 
     def _toggle_login_mode(self) -> None:
         """Disable GHCR user/token/sudo fields when 'already logged in' is checked."""
@@ -1237,14 +1269,22 @@ class InstallerApp:
         # ── normal login path ─────────────────────────────────────────────
         user          = self._s2_user.get().strip()
         token         = self._s2_token.get().strip()
-        sudo_password = self._s2_sudo.get()
-        if not user or not token or not sudo_password:
-            messagebox.showerror(t("err_title_missing"), t("s2_err_missing"))
-            return
+        is_wsl2       = bool(self._data.get("wsl2"))
+        sudo_password = self._s2_sudo.get() if not is_wsl2 else ""
+
+        if is_wsl2:
+            if not user or not token:
+                messagebox.showerror(t("err_title_missing"), t("s2_err_missing_wsl2"))
+                return
+        else:
+            if not user or not token or not sudo_password:
+                messagebox.showerror(t("err_title_missing"), t("s2_err_missing"))
+                return
 
         self._data["ghcr_user"]          = user
         self._data["ghcr_token"]         = token
-        self._data["sudo_password"]      = sudo_password
+        if not is_wsl2:
+            self._data["sudo_password"]  = sudo_password
         self._btn_next.configure(state=tk.DISABLED)
         self._btn_back.configure(state=tk.DISABLED)
         self.root.after(0, lambda: self._s2_status.configure(
@@ -1252,16 +1292,25 @@ class InstallerApp:
 
         def task() -> None:
             try:
-                result = subprocess.run(
-                    ["sudo", "-k", "-S",
-                     "docker", "login", "ghcr.io",
-                     "-u", user, "--password-stdin"],
-                    # sudo reads the first line as its password;
-                    # docker login reads the remainder as the registry token.
-                    input=sudo_password + "\n" + token,
-                    capture_output=True,
-                    text=True,
-                )
+                if is_wsl2:
+                    result = subprocess.run(
+                        ["docker", "login", "ghcr.io",
+                         "-u", user, "--password-stdin"],
+                        input=token,
+                        capture_output=True,
+                        text=True,
+                    )
+                else:
+                    result = subprocess.run(
+                        ["sudo", "-k", "-S",
+                         "docker", "login", "ghcr.io",
+                         "-u", user, "--password-stdin"],
+                        # sudo reads the first line as its password;
+                        # docker login reads the remainder as the registry token.
+                        input=sudo_password + "\n" + token,
+                        capture_output=True,
+                        text=True,
+                    )
             except FileNotFoundError:
                 self.root.after(0, lambda: self._s2_status.configure(
                     text=t("s2_no_docker"), fg=C_DANGER))
@@ -1363,11 +1412,11 @@ class InstallerApp:
             bg="white", fg="#555", font=("Segoe UI", self._get_font_size(9)),
         ).grid(row=next_row+1, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
-        # Sudo-Passwort-Feld — nur anzeigen wenn Schritt 2 übersprungen wurde
+        # Sudo-Passwort-Feld — nur anzeigen wenn Schritt 2 übersprungen wurde und nicht WSL 2 Modus
         self._s3_sudo_var: tk.StringVar | None = None
         self._s3_sudo_entry: tk.Entry | None = None
         sudo_row_offset = 0
-        if not self._data.get("sudo_password"):
+        if not self._data.get("sudo_password") and not self._data.get("wsl2"):
             sudo_row_offset = 2
             tk.Label(c, text=t("s3_lbl_sudo"), bg="white",
                      font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
@@ -1458,7 +1507,11 @@ class InstallerApp:
                     Streams stdout/stderr to the log widget and suppresses the sudo
                     password prompt line.
                     """
-                    cmd = ["sudo", "-k", "-S", "docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
+                    is_wsl2 = bool(self._data.get("wsl2"))
+                    if is_wsl2:
+                        cmd = ["docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
+                    else:
+                        cmd = ["sudo", "-k", "-S", "docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
                     try:
                         p = subprocess.Popen(
                             cmd,
@@ -1475,8 +1528,9 @@ class InstallerApp:
                         return None
                     self._deploy_proc = p
                     assert p.stdin is not None
-                    p.stdin.write(sudo_password + "\n")
-                    p.stdin.flush()
+                    if not is_wsl2:
+                        p.stdin.write(sudo_password + "\n")
+                        p.stdin.flush()
                     p.stdin.close()
                     assert p.stdout is not None
                     for line in p.stdout:
@@ -1502,7 +1556,11 @@ class InstallerApp:
                     import threading
                     import time
                     
-                    cmd = ["sudo", "-k", "-S", "docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
+                    is_wsl2 = bool(self._data.get("wsl2"))
+                    if is_wsl2:
+                        cmd = ["docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
+                    else:
+                        cmd = ["sudo", "-k", "-S", "docker", "compose", "-f", str(COMPOSE_FILE)] + subcmd
                     try:
                         p = subprocess.Popen(
                             cmd,
@@ -1521,8 +1579,9 @@ class InstallerApp:
                     
                     self._deploy_proc = p
                     assert p.stdin is not None
-                    p.stdin.write(sudo_password + "\n")
-                    p.stdin.flush()
+                    if not is_wsl2:
+                        p.stdin.write(sudo_password + "\n")
+                        p.stdin.flush()
                     p.stdin.close()
                     
                     # Circular buffer: keep last 500 lines for error reporting
@@ -1693,7 +1752,19 @@ def _check_prerequisites(*, skip_setup: bool = False) -> list[str]:
             problems.append(t("skip_no_env"))
     if not COMPOSE_FILE.is_file():
         problems.append(t("err_no_compose", dir=str(REPO_DIR)))
-    if not shutil.which("sudo"):
+    # Check if WSL 2 mode is already enabled in the existing .env
+    wsl_mode = False
+    if ENV_FILE.is_file():
+        try:
+            # Simple custom parser to read POS_WSL2 without full parsing code
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("POS_WSL2="):
+                    wsl_mode = line.partition("=")[2].strip().lower() == "true"
+                    break
+        except Exception:
+            pass
+
+    if not wsl_mode and not shutil.which("sudo"):
         problems.append(t("err_no_sudo"))
     if not shutil.which("docker"):
         problems.append(t("err_no_docker"))

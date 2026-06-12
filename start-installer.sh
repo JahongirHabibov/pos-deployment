@@ -39,6 +39,22 @@ echo "  ║   POS System — Installations-Assistent       ║"
 echo "  ╚══════════════════════════════════════════════╝"
 echo -e "${NC}"
 
+# ── WSL 2 / DISPLAY Vorbereitung ──────────────────────────────────────────────
+IS_WSL=false
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
+if [[ "$IS_WSL" == true ]]; then
+    if [[ -z "${DISPLAY:-}" ]]; then
+        HOST_IP=$(grep nameserver /etc/resolv.conf | awk '{print $2}' | head -n1 || echo "")
+        if [[ -n "$HOST_IP" ]]; then
+            export DISPLAY="$HOST_IP:0.0"
+            info "WSL 2 erkannt. DISPLAY-Variable wurde auf '$DISPLAY' gesetzt."
+        fi
+    fi
+fi
+
 # ── 1. Check Python 3.10+ ─────────────────────────────────────────────────────
 PYTHON=""
 for candidate in python3 python3.12 python3.11 python3.10; do
@@ -60,23 +76,31 @@ if [[ -z "$PYTHON" ]]; then
 fi
 success "Python gefunden: $PYTHON ($ver)"
 
-# ── 2. Check Tkinter ──────────────────────────────────────────────────────────
+# ── 2. Check & Install Tkinter ────────────────────────────────────────────────
 if ! "$PYTHON" -c "import tkinter" 2>/dev/null; then
-    error "Das Python-Modul 'tkinter' ist nicht installiert."
-    echo ""
-    echo "  Bitte installieren Sie es mit einem der folgenden Befehle:"
-    echo ""
+    warn "Das Python-Modul 'tkinter' ist nicht installiert."
+    info "Versuche, 'tkinter' automatisch zu installieren (erfordert ggf. Sudo-Berechtigungen) ..."
     if command -v apt-get &>/dev/null; then
-        echo "    sudo apt-get install python3-tk"
+        if sudo apt-get update && sudo apt-get install -y python3-tk; then
+            success "Tkinter erfolgreich über apt-get installiert."
+        else
+            die "Automatische Installation von python3-tk fehlgeschlagen."
+        fi
     elif command -v dnf &>/dev/null; then
-        echo "    sudo dnf install python3-tkinter"
+        if sudo dnf install -y python3-tkinter; then
+            success "Tkinter erfolgreich über dnf installiert."
+        else
+            die "Automatische Installation von python3-tkinter fehlgeschlagen."
+        fi
     elif command -v pacman &>/dev/null; then
-        echo "    sudo pacman -S tk"
+        if sudo pacman -S --noconfirm tk; then
+            success "Tkinter erfolgreich über pacman installiert."
+        else
+            die "Automatische Installation von tk (pacman) fehlgeschlagen."
+        fi
     else
-        echo "    (Paketmanager unbekannt — bitte tkinter manuell installieren)"
+        die "Paketmanager unbekannt — bitte installieren Sie 'tkinter' manuell."
     fi
-    echo ""
-    exit 1
 fi
 success "Tkinter verfügbar"
 

@@ -112,5 +112,7 @@
   "s2_hint_token": "Personal Access Token with read:packages permission.",
   "s2_hint_sudo": "Sudo password of the current user for Docker commands.",
   "s2_hint_backup_user": "Username for the Backup Web UI (default: admin).",
-  "s2_hint_backup_pass": "Password to access the Backup Web UI on port 8300."
+  "s2_hint_backup_pass": "Password to access the Backup Web UI on port 8300.",
+  "s1_chk_wsl2": "Enable WSL 2 / Docker without Sudo mode",
+  "s2_err_missing_wsl2": "Please enter username and token."
 }
