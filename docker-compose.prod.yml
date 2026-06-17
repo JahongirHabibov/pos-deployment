@@ -232,10 +232,13 @@ services:
     container_name: pos-backup
     hostname: pos-backup
     env_file: .env
+    environment:
+      IMAGE_DATA_DIR: /data/images
     ports:
       - "8300:8300"
     volumes:
       - ./backups:/backups
+      - pos-image-data:/data/images    # Image backup source (same named volume as image-service)
     networks:
       - pos-network
     restart: unless-stopped
