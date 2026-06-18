@@ -238,6 +238,7 @@ services:
       - "8300:8300"
     volumes:
       - ./backups:/backups
+      - pos-backup-state:/app/state    # Persistent scheduler config + history (survives updates)
       - pos-image-data:/data/images    # Image backup source (same named volume as image-service)
     networks:
       - pos-network
@@ -265,6 +266,8 @@ volumes:
     name: pos-redis-data
   pos-image-data:
     name: pos-image-data
+  pos-backup-state:
+    name: pos-backup-state
 
 # =============================================================================
 # NETWORKS
