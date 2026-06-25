@@ -167,9 +167,9 @@ else
     success "WireGuard bereits installiert"
 fi
 
-# TigerVNC
-if ! command -v vncserver &>/dev/null; then
-    PKGS_TO_INSTALL+=(tigervnc-standalone-server)
+# TigerVNC — braucht vncserver UND vncpasswd (vncpasswd liegt in tigervnc-common)
+if ! command -v vncserver &>/dev/null || ! command -v vncpasswd &>/dev/null; then
+    PKGS_TO_INSTALL+=(tigervnc-standalone-server tigervnc-common)
 else
     success "TigerVNC bereits installiert"
 fi
