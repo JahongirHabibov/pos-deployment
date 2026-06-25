@@ -397,18 +397,14 @@ After=network.target wg-quick@${WG_INTERFACE}.service
 Wants=wg-quick@${WG_INTERFACE}.service
 
 [Service]
-Type=forking
+# Type=simple + -fg: vncserver bleibt im Vordergrund, systemd trackt den
+# Prozess direkt. Vermeidet das fragile Type=forking/PIDFile-Timeout.
+Type=simple
 User=${REAL_USER}
 WorkingDirectory=${REAL_HOME}
-PIDFile=${REAL_HOME}/.vnc/%H${VNC_DISPLAY}.pid
 
-ExecStartPre=-/usr/bin/vncserver -kill ${VNC_DISPLAY} > /dev/null 2>&1
-ExecStart=/usr/bin/vncserver ${VNC_DISPLAY} \
-    -geometry ${VNC_GEOMETRY} \
-    -depth ${VNC_DEPTH} \
-    -interface ${WG_CLIENT_IP_ADDR} \
-    -SecurityTypes VncAuth \
-    -rfbauth ${REAL_HOME}/.vnc/passwd
+ExecStartPre=-/usr/bin/vncserver -kill ${VNC_DISPLAY}
+ExecStart=/usr/bin/vncserver ${VNC_DISPLAY} -fg -geometry ${VNC_GEOMETRY} -depth ${VNC_DEPTH} -interface ${WG_CLIENT_IP_ADDR} -SecurityTypes VncAuth -rfbauth ${REAL_HOME}/.vnc/passwd
 ExecStop=/usr/bin/vncserver -kill ${VNC_DISPLAY}
 
 Restart=on-failure
