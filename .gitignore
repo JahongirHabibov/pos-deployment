@@ -21,3 +21,6 @@ updater-state/
 backups/
 log-*
 data/*
+
+# -- Remote Access --
+remote-access.conf
