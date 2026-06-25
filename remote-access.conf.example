@@ -1,0 +1,43 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# remote-access.conf.example — Konfiguration für setup-remote-access.sh
+#
+# Kopieren und anpassen:
+#   cp remote-access.conf.example remote-access.conf
+#   sudo ./setup-remote-access.sh --config ./remote-access.conf
+#
+# Alle Variablen sind optional — fehlende werden interaktiv abgefragt.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── WireGuard ──────────────────────────────────────────────────────────────────
+
+# Öffentliche Adresse und Port des WireGuard-Servers (VPS)
+# Format: IP:Port oder Hostname:Port
+WG_SERVER_ENDPOINT="1.2.3.4:51820"
+
+# Öffentlicher WireGuard-Key des VPS-Servers
+# Abrufen auf dem VPS mit: sudo wg show wg0 public-key
+WG_SERVER_PUBKEY="<VPS-PUBLIC-KEY>"
+
+# Dem POS-Gerät zugewiesene IP im WireGuard-Netz (mit CIDR-Maske)
+# Jedes Gerät muss eine eindeutige IP haben
+# Beispiele:
+#   Gerät 1:  10.8.0.2/32
+#   Gerät 2:  10.8.0.3/32
+#   Gerät 3:  10.8.0.4/32
+WG_CLIENT_IP="10.8.0.2/32"
+
+# Welche IPs über den WireGuard-Tunnel geroutet werden
+# Standard: nur das VPN-Subnetz (POS behält seine normale Internetverbindung)
+# Für nur VPN-Traffic: 10.8.0.0/24
+# Für gesamten Traffic durch VPS: 0.0.0.0/0 (nicht empfohlen für POS)
+WG_ALLOWED_IPS="10.8.0.0/24"
+
+# ── TigerVNC ───────────────────────────────────────────────────────────────────
+
+# VNC-Passwort (min. 6 Zeichen, max. 8 werden verwendet)
+# Leer lassen → interaktiv abfragen
+VNC_PASSWORD=""
+
+# Bildschirmauflösung für VNC-Session
+# Standard: 1920x1080
+VNC_GEOMETRY="1920x1080"
