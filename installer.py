@@ -293,6 +293,7 @@ def _patch_env_keys(mapping: dict[str, str]) -> None:
         else:
             content += f"\n{key}={value}"
     ENV_FILE.write_text(content, encoding="utf-8")
+    ENV_FILE.chmod(0o600)  # .env holds secrets — keep it owner-only
 
 
 def _export_env_to_os_environ(env: dict) -> None:

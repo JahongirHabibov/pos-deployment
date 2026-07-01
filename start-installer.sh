@@ -6,6 +6,7 @@
 #   ./start-installer.sh              # full setup + 3-step GUI wizard
 #   ./start-installer.sh --skip-setup # skip to deployment (provisioning done)
 #   ./start-installer.sh --no-remote  # skip remote access setup
+#   ./start-installer.sh --no-update  # skip the git freshness / self-update check
 # ──────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -53,18 +54,90 @@ status_row() {
 # ── Argument parsing ──────────────────────────────────────────────────────────
 SKIP_SETUP=false
 NO_REMOTE=false
+NO_UPDATE=false
 INSTALLER_ARGS=()
+# Preserve the original arguments so the self-update guard can re-exec verbatim.
+ORIG_ARGS=("$@")
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-setup) SKIP_SETUP=true; INSTALLER_ARGS+=("--skip-setup"); shift ;;
         --no-remote)  NO_REMOTE=true;  shift ;;
+        --no-update)  NO_UPDATE=true;  shift ;;
         --help|-h)
-            sed -n '3,7p' "$0" | sed 's/^# \?//'
+            sed -n '3,9p' "$0" | sed 's/^# \?//'
             exit 0 ;;
         *) INSTALLER_ARGS+=("$1"); shift ;;
     esac
 done
+
+# ── Self-update guard ─────────────────────────────────────────────────────────
+# Ensure the admin never deploys stale code after forgetting `git pull`.
+# Fetches origin/main, fast-forwards if behind, then re-execs so the freshly
+# pulled version of THIS script runs. Offline → warn and continue.
+UPDATE_BRANCH="main"
+
+run_update_guard() {
+    # Already re-executed once this run — don't loop.
+    [[ -n "${_POS_INSTALLER_REEXEC:-}" ]] && return 0
+    # Explicit opt-outs.
+    [[ "$NO_UPDATE" == true ]] && { warn "Self-update check skipped (--no-update)"; return 0; }
+    [[ "${SKIP_UPDATE_CHECK:-}" == "1" ]] && { warn "Self-update check skipped (SKIP_UPDATE_CHECK=1)"; return 0; }
+
+    command -v git &>/dev/null || { warn "git not found — skipping self-update check"; return 0; }
+    if ! git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
+        warn "Not a git checkout — skipping self-update check"
+        return 0
+    fi
+
+    info "Checking for a newer deployment version (branch ${UPDATE_BRANCH})..."
+    # Hard timeout so an offline device can't hang the installer on fetch.
+    if ! timeout 20 git -C "$SCRIPT_DIR" fetch --quiet origin "$UPDATE_BRANCH" 2>/dev/null; then
+        warn "Could not reach origin (offline?) — continuing with the local version"
+        return 0
+    fi
+
+    local local_rev remote_rev
+    local_rev=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "")
+    remote_rev=$(git -C "$SCRIPT_DIR" rev-parse "origin/${UPDATE_BRANCH}" 2>/dev/null || echo "")
+    if [[ -z "$remote_rev" ]]; then
+        warn "origin/${UPDATE_BRANCH} not found — skipping self-update check"
+        return 0
+    fi
+    if [[ "$local_rev" == "$remote_rev" ]]; then
+        ok "Deployment is up to date"
+        return 0
+    fi
+
+    warn "Newer version available (local ${local_rev:0:7} → origin ${remote_rev:0:7})"
+
+    # Never auto-pull over local uncommitted changes — would conflict/clobber.
+    if ! git -C "$SCRIPT_DIR" diff --quiet || ! git -C "$SCRIPT_DIR" diff --cached --quiet; then
+        fail "Local uncommitted changes present — automatic update stopped"
+        error "Resolve manually: git -C \"$SCRIPT_DIR\" status  (commit/stash/discard), then re-run"
+        die "Aborting to avoid overwriting local changes"
+    fi
+
+    # Only fast-forward when actually on the tracked branch.
+    local cur_branch
+    cur_branch=$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [[ "$cur_branch" != "$UPDATE_BRANCH" ]]; then
+        warn "On branch '${cur_branch}', expected '${UPDATE_BRANCH}' — automatic update stopped"
+        error "Switch first: git -C \"$SCRIPT_DIR\" checkout ${UPDATE_BRANCH} && git pull --ff-only"
+        die "Aborting"
+    fi
+
+    info "Updating to the latest version (git pull --ff-only)..."
+    if ! git -C "$SCRIPT_DIR" pull --ff-only --quiet origin "$UPDATE_BRANCH"; then
+        fail "git pull --ff-only failed (diverged history?)"
+        die "Resolve manually: git -C \"$SCRIPT_DIR\" pull"
+    fi
+    ok "Updated to $(git -C "$SCRIPT_DIR" rev-parse --short HEAD) — restarting installer"
+
+    # Re-exec: the current process still holds the OLD script in memory.
+    export _POS_INSTALLER_REEXEC=1
+    exec "$0" "${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}"
+}
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
@@ -73,6 +146,9 @@ echo "  ╔═══════════════════════
 echo "  ║   POS System — Setup & Installation          ║"
 echo "  ╚══════════════════════════════════════════════╝"
 echo -e "${NC}"
+
+# Make sure we are running the latest committed code before doing any work.
+run_update_guard
 
 # ── State tracking ────────────────────────────────────────────────────────────
 PYTHON=""
@@ -161,6 +237,28 @@ if [[ ! -f "$INSTALLER" ]]; then
     die "installer.py not found in $SCRIPT_DIR"
 fi
 ok "installer.py found"
+
+# ── Docker + Compose ──────────────────────────────────────────────────────────
+# Fail early here instead of deep inside the GUI's deployment step.
+if ! command -v docker &>/dev/null; then
+    fail "Docker not found"
+    die "Install Docker Engine + Compose plugin: https://docs.docker.com/engine/install/"
+fi
+ok "Docker found  ($(docker --version 2>/dev/null | awk '{print $3}' | tr -d ','))"
+
+if docker compose version &>/dev/null; then
+    ok "Docker Compose plugin available"
+else
+    fail "Docker Compose plugin not found"
+    die "Install the Compose plugin: https://docs.docker.com/compose/install/"
+fi
+
+# Daemon reachability — try direct, then via sudo (installer runs docker as root).
+if docker info &>/dev/null || sudo -n docker info &>/dev/null 2>&1; then
+    ok "Docker daemon reachable"
+else
+    warn "Docker daemon not reachable yet — the installer will prompt for sudo during deployment"
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 section "STEP 2  Remote Access (WireGuard + TigerVNC)"

@@ -104,6 +104,15 @@ def write_env(
             continue
         raw_value = secret.get("value", "")
         value = raw_value if isinstance(raw_value, str) else str(raw_value)
+        # A newline in a value would split the KEY=VALUE line and corrupt .env
+        # (turning the rest of the value into a bogus/duplicate assignment).
+        if "\n" in value or "\r" in value:
+            print(
+                f"Error: secret '{key}' contains a newline character; "
+                "refusing to write a corrupt .env file.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         secret_map[key] = value
 
     # Drop obsolete backup UI credentials if provisioning still sends them.
@@ -116,6 +125,7 @@ def write_env(
         # Upgrade: preserve existing .env, only add missing keys
         backup_path = env_output.with_stem(f"{env_output.stem}.backup")
         shutil.copy2(env_output, backup_path)
+        backup_path.chmod(0o600)  # backup holds the same secrets — keep it private
         print(f"Backed up existing {env_output} → {backup_path}")
 
         existing_content = env_output.read_text(encoding="utf-8")
@@ -170,6 +180,11 @@ def write_env(
             for entry in appended:
                 f.write(f"{entry}\n")
         print(f"  Appended {len(appended)} additional secret(s).")
+
+    # .env holds all runtime secrets (DB/JWT/etc.). shutil.copy2 above inherits
+    # the template's mode (world/group-readable); force owner-only before we exit.
+    env_output.chmod(0o600)
+    print(f"  Secured {env_output} (chmod 600).")
 
 
 def main() -> None:

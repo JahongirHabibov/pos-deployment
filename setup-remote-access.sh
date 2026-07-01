@@ -315,6 +315,28 @@ sleep 2
 if ip addr show "$WG_INTERFACE" &>/dev/null; then
     WG_IP_ACTIVE=$(ip addr show "$WG_INTERFACE" | grep 'inet ' | awk '{print $2}' || echo "unbekannt")
     success "WireGuard-Interface aktiv: ${WG_IP_ACTIVE}"
+
+    # Ein aktives Interface heißt NICHT, dass der Tunnel steht. Auf echten
+    # Handshake mit dem VPS-Peer warten (latest-handshakes != 0).
+    info "Prüfe Peer-Handshake mit dem VPS..."
+    WG_HANDSHAKE_OK=false
+    for _ in $(seq 1 6); do
+        LAST_HS=$(wg show "$WG_INTERFACE" latest-handshakes 2>/dev/null | awk '{print $2}' | sort -rn | head -1 || echo "0")
+        if [[ -n "$LAST_HS" && "$LAST_HS" -gt 0 ]]; then
+            WG_HANDSHAKE_OK=true
+            break
+        fi
+        sleep 2
+    done
+    if [[ "$WG_HANDSHAKE_OK" == true ]]; then
+        success "WireGuard-Handshake erfolgreich — Tunnel steht"
+    else
+        warn "Kein Handshake mit dem VPS innerhalb von ~12s."
+        warn "Interface ist oben, aber der Tunnel ist NICHT verbunden. Prüfen:"
+        warn "  • Öffentlichen Key dieses Geräts auf dem VPS als [Peer] eingetragen?"
+        warn "  • VPS-Endpoint/Port (${WG_SERVER_ENDPOINT}) erreichbar / Firewall offen?"
+        warn "  • Status später erneut prüfen: sudo $0 --status"
+    fi
 else
     warn "WireGuard-Interface ${WG_INTERFACE} noch nicht sichtbar — ggf. VPS-Config prüfen"
 fi
