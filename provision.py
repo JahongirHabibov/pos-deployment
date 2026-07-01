@@ -90,8 +90,9 @@ def write_env(
 ) -> None:
     """Copy env_example → env_output and apply provisioned values.
 
-    BACKUP_UI_PASSWORD must be provided by Legisell provisioning.
-    BACKUP_UI_USER is always enforced as "admin".
+    The backup sidecar no longer has its own Web UI login — it is managed from
+    the POS admin UI via the backend proxy. Any BACKUP_UI_* secret returned by
+    provisioning is ignored (backward compatible).
     """
     # Normalize API payload first so we can validate before modifying files.
     secret_map: dict[str, str] = {}
@@ -105,16 +106,9 @@ def write_env(
         value = raw_value if isinstance(raw_value, str) else str(raw_value)
         secret_map[key] = value
 
-    backup_ui_password = secret_map.get("BACKUP_UI_PASSWORD", "")
-    if not backup_ui_password:
-        print(
-            "Error: Legisell provisioning did not return BACKUP_UI_PASSWORD.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # Keep backup UI user fixed and do not require manual input downstream.
-    secret_map["BACKUP_UI_USER"] = "admin"
+    # Drop obsolete backup UI credentials if provisioning still sends them.
+    secret_map.pop("BACKUP_UI_PASSWORD", None)
+    secret_map.pop("BACKUP_UI_USER", None)
 
     is_upgrade = env_output.is_file()
 

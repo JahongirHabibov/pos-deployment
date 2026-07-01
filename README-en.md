@@ -55,7 +55,8 @@ Required input data from the developer/distributor or Legisell admin:
 | IMAGE_BACKUP | Backup sidecar tag written to `.env`. |
 | DEPLOYMENT_REPO | Repo in `org/pos-deployment` format; used for release/tag hints and stored in `.env`. |
 | Path to pos-deployment (`HOST_COMPOSE_PROJECT_DIR`) | Absolute host path to this deployment directory; required by updater self-update and bind-mount path resolution. |
-| Timezone (`TZ`) | IANA timezone applied to containers (for logs, schedules, timestamps). |
+
+> Timezone, administrator login (ID `0001`, 6-digit PIN, optional e-mail) are configured in-app during the first-run Setup wizard and stored in the database — not in `.env`.
 
 Notes:
 - If `.env` already exists, relevant fields are pre-filled automatically.
@@ -76,8 +77,7 @@ Notes:
 - The installer writes `POS_DOCKER_AUTH_FILE` to `.env` with the absolute Linux path to that file.
 - The GUI does not show this as a user-editable field; it is a technical value managed by the installer.
 - The compose file refuses to auto-create this path; if it is missing or a directory, rerun Docker Login in the installer.
-- `BACKUP_UI_PASSWORD` is provided by Legisell provisioning (`provision.py`) and written to `.env` automatically.
-- `BACKUP_UI_USER` is fixed to `admin`.
+- The backup service has no separate login or published port — it is managed from the POS admin UI (Settings ▸ Backup), gated by the `system.backup` permission.
 
 ### Step 3 — Deployment
 
@@ -93,8 +93,7 @@ This step also shows a read-only summary (API URL, GHCR user, app/port/db/image 
 ## What the Installer Automates
 
 - Calls `provision.py` and generates/updates `.env`.
-- Writes `BACKUP_UI_PASSWORD` from Legisell provisioning into `.env` and uses `BACKUP_UI_USER=admin`.
-- Patches deployment keys in `.env` (`IMAGE_*`, `DEPLOYMENT_REPO`, `HOST_COMPOSE_PROJECT_DIR`, `TZ`).
+- Patches deployment keys in `.env` (`IMAGE_*`, `DEPLOYMENT_REPO`, `HOST_COMPOSE_PROJECT_DIR`).
 - Performs GHCR login and stores credential bridge file for updater.
 - Network `pos-network` is created automatically by Docker Compose from `docker-compose.prod.yml` — no separate creation step is needed.
 - Runs `docker compose pull` with a progress spinner (output is buffered internally, not streamed line-by-line) and `docker compose up -d` with live streaming logs.
@@ -123,8 +122,7 @@ The `pos-auth.json` file is the updater bridge for WSL/Docker Desktop compatibil
 python3 provision.py --token <ONE_TIME_PROVISIONING_TOKEN> --api-url <LEGISELL_BACKEND_URL>
 ```
 
-3. Ensure at least these values are correct in `.env`.
-`BACKUP_UI_PASSWORD` must come from the provisioning response, and `BACKUP_UI_USER` must be `admin`:
+3. Ensure at least these values are correct in `.env`:
 
 ```dotenv
 IMAGE_BACKEND=ghcr.io/<org>/pos-backend:<tag>
@@ -135,10 +133,9 @@ IMAGE_BACKUP=ghcr.io/<org>/pos-backup:<tag>
 DEPLOYMENT_REPO=<org>/pos-deployment
 HOST_COMPOSE_PROJECT_DIR=/absolute/path/to/pos-deployment
 POS_DOCKER_AUTH_FILE=/home/<user>/.docker/pos-auth.json
-TZ=Europe/Berlin
-BACKUP_UI_USER=admin
-BACKUP_UI_PASSWORD=<from-provisioning-secret>
 ```
+
+Timezone and the administrator account are set later in the browser via the first-run Setup wizard.
 
 Use an absolute Linux path for `POS_DOCKER_AUTH_FILE`; do not use `~` in `.env`. In the GUI flow, the installer writes this value automatically.
 

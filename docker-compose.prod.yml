@@ -225,7 +225,9 @@ services:
 
 
   # ===========================================================================
-  # BACKUP SIDECAR — Automatische PostgreSQL-Dumps + Web-UI (Port 8300)
+  # BACKUP SIDECAR — Automatische PostgreSQL-Dumps
+  # No published port and no separate login: managed from the POS admin UI
+  # (Settings ▸ Backup) via the backend proxy, gated by `system.backup`.
   # ===========================================================================
   backup:
     image: ${IMAGE_BACKUP}
@@ -234,8 +236,7 @@ services:
     env_file: .env
     environment:
       IMAGE_DATA_DIR: /data/images
-    ports:
-      - "8300:8300"
+    # KEIN ports: — Backup ist nur intern über pos-network erreichbar!
     volumes:
       - ./backups:/backups
       - pos-backup-state:/app/state    # Persistent scheduler config + history (survives updates)

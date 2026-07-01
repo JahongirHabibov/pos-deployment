@@ -47,10 +47,6 @@
   "s2_login_fail": "Ошибка входа.",
   "s2_login_err": "✗ Ошибка: {msg}",
   "s2_backup_section": "── Backup Web-UI ──",
-  "s2_lbl_backup_user": "Пользователь Backup UI:",
-  "s2_lbl_backup_pass": "Пароль Backup UI:",
-  "s2_show_backup_pass": "Показать пароль",
-  "s2_err_backup_pass": "Необходимо указать пароль Backup UI.",
   "s3_title": "Шаг 3 — Сводка и развёртывание",
   "s3_sum_api_url": "URL Legisell API",
   "s3_sum_ghcr_user": "Пользователь GHCR",
@@ -92,11 +88,7 @@
   "s1_recent_tags_label": "Последние версии на GHCR:",
   "s1_hint_fetching": "Загрузка последних версий …",
   "s1_hint_fetch_err": "Не удалось получить версии.",
-  "s1_lbl_tz": "Часовой пояс (TZ):",
-  "s2_backup_pass_provisioned": "ℹ Пароль установлен через Legisell Provisioning и предзаполнен.",
-
   "s1_lbl_host_compose_dir": "Путь к pos-deployment:",
-
   "s1_hint_otpk": "Одноразовый ключ активации от владельца Legisell.",
   "s1_hint_url": "Полный URL Legisell Pub-API, например https://api.legisell.de:8443",
   "s1_hint_image_backend": "Тег Docker-образа для бэкенда, например ghcr.io/org/pos-backend:1.2.3",
@@ -106,13 +98,10 @@
   "s1_hint_image_backup": "Тег Docker-образа для сайдкара резервного копирования.",
   "s1_hint_deployment_repo": "GitHub-репозиторий с информацией о релизах: org/pos-deployment",
   "s1_hint_host_compose_dir": "Абсолютный путь к каталогу развёртывания на хосте, например /home/pos-deployment. Необходим для самообновления.",
-  "s1_hint_tz": "Часовой пояс IANA для всех контейнеров, например Europe/Berlin",
-
   "s2_hint_user": "Имя пользователя GHCR (технический аккаунт).",
   "s2_hint_token": "Personal Access Token с правом read:packages.",
   "s2_hint_sudo": "Пароль sudo текущего пользователя для команд Docker.",
   "s2_hint_backup_user": "Имя пользователя для веб-интерфейса резервного копирования (по умолчанию: admin).",
-  "s2_hint_backup_pass": "Пароль для веб-интерфейса резервного копирования на порту 8300.",
   "s1_chk_wsl2": "Включить режим WSL 2 / Docker без sudo",
   "s2_err_missing_wsl2": "Пожалуйста, введите имя пользователя и токен."
 }

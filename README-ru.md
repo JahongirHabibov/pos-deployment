@@ -55,7 +55,8 @@ chmod +x start-installer.sh
 | IMAGE_BACKUP | Тег backup-sidecar, записывается в `.env`. |
 | DEPLOYMENT_REPO | Репозиторий в формате `org/pos-deployment`; используется для подсказок по релизам/тегам и сохраняется в `.env`. |
 | Путь к pos-deployment (`HOST_COMPOSE_PROJECT_DIR`) | Абсолютный путь к каталогу развёртывания на хосте; нужен для self-update обновлятора и корректных bind-mount путей. |
-| Часовой пояс (`TZ`) | IANA timezone для контейнеров (логи, расписания, метки времени). |
+
+> Часовой пояс и учётная запись администратора (ID `0001`, 6-значный PIN, необязательный e-mail) настраиваются в приложении через мастер первичной настройки и хранятся в базе данных — не в `.env`.
 
 Примечания:
 - Если `.env` уже существует, релевантные поля заполняются автоматически.
@@ -76,8 +77,7 @@ chmod +x start-installer.sh
 - Инсталлятор записывает `POS_DOCKER_AUTH_FILE` в `.env` с абсолютным Linux-путём к этому файлу.
 - GUI не показывает это поле для ручного ввода; это техническое значение управляется инсталлятором.
 - Compose больше не создаёт этот путь автоматически; если файл отсутствует или является папкой, повторите Docker Login в инсталляторе.
-- `BACKUP_UI_PASSWORD` приходит из Legisell Provisioning (`provision.py`) и автоматически записывается в `.env`.
-- `BACKUP_UI_USER` фиксирован и равен `admin`.
+- Служба резервного копирования не имеет отдельного логина и опубликованного порта — управляется из админ-панели POS (Настройки ▸ Резервные копии), с правом `system.backup`.
 
 ### Шаг 3 — Развёртывание
 
@@ -93,8 +93,7 @@ chmod +x start-installer.sh
 ## Что автоматизирует инсталлятор
 
 - Вызывает `provision.py` и создаёт/обновляет `.env`.
-- Записывает `BACKUP_UI_PASSWORD` из Legisell Provisioning в `.env` и использует `BACKUP_UI_USER=admin`.
-- Патчит ключи деплоя в `.env` (`IMAGE_*`, `DEPLOYMENT_REPO`, `HOST_COMPOSE_PROJECT_DIR`, `TZ`).
+- Патчит ключи деплоя в `.env` (`IMAGE_*`, `DEPLOYMENT_REPO`, `HOST_COMPOSE_PROJECT_DIR`).
 - Выполняет GHCR login и сохраняет bridge-файл учётных данных для обновлятора.
 - Сеть `pos-network` создаётся автоматически через Docker Compose на основе `docker-compose.prod.yml` — отдельный шаг создания не требуется.
 - Запускает `docker compose pull` с индикатором прогресса (вывод буферизуется внутри, построчный лог не отображается) и `docker compose up -d` с live-логом.
@@ -123,8 +122,7 @@ python3 -c 'import base64,json,os,pathlib; p=pathlib.Path.home()/".docker"/"pos-
 python3 provision.py --token <ONE_TIME_PROVISIONING_TOKEN> --api-url <LEGISELL_BACKEND_URL>
 ```
 
-3. Проверьте, что в `.env` корректны минимум эти значения.
-`BACKUP_UI_PASSWORD` должен приходить из ответа provisioning, а `BACKUP_UI_USER` должен быть `admin`:
+3. Проверьте, что в `.env` корректны минимум эти значения:
 
 ```dotenv
 IMAGE_BACKEND=ghcr.io/<org>/pos-backend:<tag>
@@ -135,10 +133,9 @@ IMAGE_BACKUP=ghcr.io/<org>/pos-backup:<tag>
 DEPLOYMENT_REPO=<org>/pos-deployment
 HOST_COMPOSE_PROJECT_DIR=/absolute/path/to/pos-deployment
 POS_DOCKER_AUTH_FILE=/home/<user>/.docker/pos-auth.json
-TZ=Europe/Berlin
-BACKUP_UI_USER=admin
-BACKUP_UI_PASSWORD=<from-provisioning-secret>
 ```
+
+Часовой пояс и учётная запись администратора задаются позже в браузере через мастер первичной настройки.
 
 Для `POS_DOCKER_AUTH_FILE` используйте абсолютный Linux-путь; не используйте `~` в `.env`. При установке через GUI это значение записывает сам инсталлятор.
 

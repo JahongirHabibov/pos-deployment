@@ -47,10 +47,6 @@
   "s2_login_fail": "Login failed.",
   "s2_login_err": "✗ Error: {msg}",
   "s2_backup_section": "── Backup Web UI ──",
-  "s2_lbl_backup_user": "Backup UI Username:",
-  "s2_lbl_backup_pass": "Backup UI Password:",
-  "s2_show_backup_pass": "Show password",
-  "s2_err_backup_pass": "Backup UI Password is required.",
   "s3_title": "Step 3 — Summary & Deployment",
   "s3_sum_api_url": "Legisell API URL",
   "s3_sum_ghcr_user": "GHCR Username",
@@ -92,11 +88,7 @@
   "s1_recent_tags_label": "Latest versions on GHCR:",
   "s1_hint_fetching": "Fetching latest versions …",
   "s1_hint_fetch_err": "Could not retrieve versions.",
-  "s1_lbl_tz": "Timezone (TZ):",
-  "s2_backup_pass_provisioned": "ℹ Password was set via Legisell Provisioning and pre-filled.",
-
   "s1_lbl_host_compose_dir": "Path to pos-deployment:",
-
   "s1_hint_otpk": "One-time activation key provided by the Legisell owner.",
   "s1_hint_url": "Full URL of the Legisell Pub-API, e.g. https://api.legisell.de:8443",
   "s1_hint_image_backend": "Docker image tag for the backend, e.g. ghcr.io/org/pos-backend:1.2.3",
@@ -106,13 +98,10 @@
   "s1_hint_image_backup": "Docker image tag for the backup sidecar.",
   "s1_hint_deployment_repo": "GitHub repo for release notes, format: org/pos-deployment",
   "s1_hint_host_compose_dir": "Absolute host path to this directory, e.g. /home/pos-deployment. Required by the updater for self-updates.",
-  "s1_hint_tz": "IANA timezone for all containers, e.g. Europe/Berlin",
-
   "s2_hint_user": "GHCR username (technical account).",
   "s2_hint_token": "Personal Access Token with read:packages permission.",
   "s2_hint_sudo": "Sudo password of the current user for Docker commands.",
   "s2_hint_backup_user": "Username for the Backup Web UI (default: admin).",
-  "s2_hint_backup_pass": "Password to access the Backup Web UI on port 8300.",
   "s1_chk_wsl2": "Enable WSL 2 / Docker without Sudo mode",
   "s2_err_missing_wsl2": "Please enter username and token."
 }

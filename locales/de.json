@@ -47,10 +47,6 @@
   "s2_login_fail": "Login fehlgeschlagen.",
   "s2_login_err": "✗ Fehler: {msg}",
   "s2_backup_section": "── Backup Web-UI ──",
-  "s2_lbl_backup_user": "Backup UI Benutzer:",
-  "s2_lbl_backup_pass": "Backup UI Passwort:",
-  "s2_show_backup_pass": "Passwort anzeigen",
-  "s2_err_backup_pass": "Backup UI Passwort ist Pflicht.",
   "s3_title": "Schritt 3 — Zusammenfassung & Deployment",
   "s3_sum_api_url": "Legisell API URL",
   "s3_sum_ghcr_user": "GHCR Benutzername",
@@ -92,11 +88,7 @@
   "s1_recent_tags_label": "Letzte Versionen auf GHCR:",
   "s1_hint_fetching": "Lade letzte Versionen …",
   "s1_hint_fetch_err": "Versionen konnten nicht abgerufen werden.",
-  "s1_lbl_tz": "Zeitzone (TZ):",
-  "s2_backup_pass_provisioned": "ℹ Passwort wurde über Legisell Provisioning gesetzt und vorausgefüllt.",
-
   "s1_lbl_host_compose_dir": "Pfad zum pos-deployment:",
-
   "s1_hint_otpk": "Einmaliger Aktivierungsschlüssel vom Legisell-Owner.",
   "s1_hint_url": "Vollständige URL der Legisell Pub-API, z. B. https://api.legisell.de:8443",
   "s1_hint_image_backend": "Docker-Image-Tag für Backend, z. B. ghcr.io/org/pos-backend:1.2.3",
@@ -106,13 +98,10 @@
   "s1_hint_image_backup": "Docker-Image-Tag für den Backup-Sidecar.",
   "s1_hint_deployment_repo": "GitHub-Repo für Release-Infos, Format: org/pos-deployment",
   "s1_hint_host_compose_dir": "Absoluter Host-Pfad zu diesem Verzeichnis, z. B. /home/pos-deployment. Wird vom Updater für Self-Updates benötigt.",
-  "s1_hint_tz": "IANA-Zeitzone für alle Container, z. B. Europe/Berlin",
-
   "s2_hint_user": "GHCR-Benutzername (technischer Account).",
   "s2_hint_token": "Personal Access Token mit read:packages-Berechtigung.",
   "s2_hint_sudo": "Sudo-Passwort des aktuellen Benutzers für Docker-Befehle.",
   "s2_hint_backup_user": "Benutzername für das Backup-Web-UI (Standard: admin).",
-  "s2_hint_backup_pass": "Passwort für das Backup-Web-UI auf Port 8300.",
   "s1_chk_wsl2": "WSL 2 / Docker ohne Sudo Modus aktivieren",
   "s2_err_missing_wsl2": "Bitte Benutzername und Token eingeben."
 }

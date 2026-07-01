@@ -26,30 +26,6 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-# ── Timezone list (IANA) ─────────────────────────────────────────────────────
-try:
-    from zoneinfo import available_timezones as _tz_available
-    _TIMEZONES: list[str] = sorted(_tz_available())
-except ImportError:  # Python < 3.9 or tzdata not installed
-    _TIMEZONES = [
-        "Africa/Cairo", "Africa/Johannesburg",
-        "America/Chicago", "America/Denver", "America/Los_Angeles",
-        "America/New_York", "America/Sao_Paulo", "America/Toronto",
-        "Asia/Dubai", "Asia/Hong_Kong", "Asia/Kolkata", "Asia/Seoul",
-        "Asia/Shanghai", "Asia/Singapore", "Asia/Tokyo",
-        "Australia/Sydney",
-        "Europe/Amsterdam", "Europe/Athens", "Europe/Berlin",
-        "Europe/Brussels", "Europe/Budapest", "Europe/Copenhagen",
-        "Europe/Dublin", "Europe/Helsinki", "Europe/Istanbul",
-        "Europe/Kiev", "Europe/Lisbon", "Europe/London",
-        "Europe/Madrid", "Europe/Moscow", "Europe/Oslo",
-        "Europe/Paris", "Europe/Prague", "Europe/Rome",
-        "Europe/Sofia", "Europe/Stockholm", "Europe/Vienna",
-        "Europe/Warsaw", "Europe/Zurich",
-        "Pacific/Auckland", "Pacific/Honolulu",
-        "UTC",
-    ]
-
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_DIR        = Path(__file__).parent.resolve()
 ENV_EXAMPLE     = REPO_DIR / ".env.example"
@@ -409,7 +385,7 @@ class InstallerApp:
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
             "IMAGE_UPDATER", "IMAGE_BACKUP", "DEPLOYMENT_REPO",
             "HOST_COMPOSE_PROJECT_DIR",
-            "TZ", "PROVISION_DONE", "POS_WSL2",
+            "PROVISION_DONE", "POS_WSL2",
         ])
         mapping = {
             "image_backend":      "IMAGE_BACKEND",
@@ -419,7 +395,6 @@ class InstallerApp:
             "image_backup":       "IMAGE_BACKUP",
             "deployment_repo":    "DEPLOYMENT_REPO",
             "host_compose_dir":   "HOST_COMPOSE_PROJECT_DIR",
-            "tz":                 "TZ",
         }
         for data_key, env_key in mapping.items():
             value = env_vals.get(env_key, "")
@@ -435,13 +410,7 @@ class InstallerApp:
         """Re-read selected values from .env into self._data after step 1."""
         if not ENV_FILE.is_file():
             return
-        vals = _read_env_keys(["TZ", "PROVISION_DONE", "POS_WSL2"])
-        for env_key, data_key in (
-            ("TZ",                 "tz"),
-        ):
-            v = vals.get(env_key, "")
-            if v:
-                self._data[data_key] = v
+        vals = _read_env_keys(["PROVISION_DONE", "POS_WSL2"])
         # Auto-check "skip provisioning" if PROVISION_DONE=true
         if vals.get("PROVISION_DONE", "").lower() == "true":
             self._data["_already_prov"] = "1"
@@ -631,10 +600,6 @@ class InstallerApp:
             value = var.get()
             if value:  # Only overwrite with non-empty so defaults survive
                 self._data[key] = value
-        if hasattr(self, "_s1_tz_var") and self._s1_tz_var is not None:
-            tz_val = self._s1_tz_var.get().strip()
-            if tz_val:
-                self._data["tz"] = tz_val
         if hasattr(self, "_s1_already_prov"):
             self._data["_already_prov"] = "1" if self._s1_already_prov.get() else ""
         if hasattr(self, "_s1_wsl2"):
@@ -860,30 +825,8 @@ class InstallerApp:
             
             current_row += 2
 
-        # ── Timezone (TZ) ─────────────────────────────────────────────────
-        tk.Label(c, text=t("s1_lbl_tz"), bg="white", anchor="w",
-                 font=("Segoe UI", self._get_font_size(10), "bold"), width=30).grid(
-            row=current_row, column=0, sticky="w", pady=(4, 2))
-        self._s1_tz_var = tk.StringVar(
-            value=self._data.get("tz", "Europe/Berlin")
-        )
-        tz_combo = ttk.Combobox(
-            c, textvariable=self._s1_tz_var,
-            values=_TIMEZONES, width=self._get_entry_width(51), state="readonly",
-            font=("Segoe UI", self._get_font_size(10)),
-        )
-        tz_combo.grid(row=current_row, column=1, sticky="ew", padx=(0, 0), pady=(4, 2))
-        # Ensure the current value is visible in the list
-        if self._s1_tz_var.get() in _TIMEZONES:
-            tz_combo.current(_TIMEZONES.index(self._s1_tz_var.get()))
-        
-        tk.Label(
-            c, text=t("s1_hint_tz"), bg="white", fg="#000",
-            font=("Segoe UI", self._get_font_size(9)),
-            wraplength=self._get_wraplength(550), anchor="nw",
-        ).grid(row=current_row+1, column=1, sticky="ew", padx=(0, 0), pady=(0, 6))
-        
-        current_row += 2
+        # Timezone is configured in-app via the first-run Setup wizard
+        # (stored in the database), not written to .env here.
 
         def _on_repo_change(*_: object) -> None:
             if self._s1_tags_fetch_after_id is not None:
@@ -957,12 +900,6 @@ class InstallerApp:
 
     def _run_step1(self) -> None:
         vals = {k: v.get().strip() for k, v in self._s1_vars.items()}
-        tz_value = (
-            self._s1_tz_var.get().strip()
-            if hasattr(self, "_s1_tz_var") and self._s1_tz_var
-            else ""
-        ) or "Europe/Berlin"
-        self._data["tz"] = tz_value
 
         # ── Idee 1: skip provisioning when checkbox is set ────────────────
         if self._s1_already_prov.get():
@@ -994,7 +931,6 @@ class InstallerApp:
                 self._log(self._s1_log, t("s1_log_skip_provision"), C_INFO)
                 patch_full = {
                     **patch,
-                    "TZ": tz_value,
                     "POS_WSL2": "true" if self._s1_wsl2.get() else "false"
                 }
                 try:
@@ -1047,7 +983,7 @@ class InstallerApp:
                 self._set_nav(back=False, next_=True)
                 return
 
-            # Patch IMAGE_* and TZ into .env
+            # Patch IMAGE_* deployment keys into .env
             self._log(self._s1_log, t("s1_log_writing"))
             try:
                 _patch_env_keys({
@@ -1058,7 +994,6 @@ class InstallerApp:
                     "IMAGE_BACKUP":              vals["image_backup"],
                     "DEPLOYMENT_REPO":           vals["deployment_repo"],
                     "HOST_COMPOSE_PROJECT_DIR":  vals["host_compose_dir"],
-                    "TZ":                        tz_value,
                     "PROVISION_DONE":            "true",
                     "POS_WSL2":                  "true" if self._s1_wsl2.get() else "false",
                 })
