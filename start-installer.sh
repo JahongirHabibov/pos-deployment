@@ -5,15 +5,16 @@
 # Usage:
 #   ./start-installer.sh              # full setup + 3-step GUI wizard
 #   ./start-installer.sh --skip-setup # skip to deployment (provisioning done)
-#   ./start-installer.sh --no-remote  # skip remote access setup
 #   ./start-installer.sh --no-update  # skip the git freshness / self-update check
+#
+#   Remote access (WireGuard/VNC) is a SEPARATE, isolated step and is NOT run
+#   by this installer. Set it up on its own: sudo ./setup-remote-access.sh
 # ──────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALLER="$SCRIPT_DIR/installer.py"
-REMOTE_SETUP="$SCRIPT_DIR/setup-remote-access.sh"
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -53,7 +54,6 @@ status_row() {
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 SKIP_SETUP=false
-NO_REMOTE=false
 NO_UPDATE=false
 INSTALLER_ARGS=()
 # Preserve the original arguments so the self-update guard can re-exec verbatim.
@@ -62,10 +62,12 @@ ORIG_ARGS=("$@")
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-setup) SKIP_SETUP=true; INSTALLER_ARGS+=("--skip-setup"); shift ;;
-        --no-remote)  NO_REMOTE=true;  shift ;;
+        # Deprecated no-op: remote access is a separate step (setup-remote-access.sh)
+        # and is never run by this installer. Accepted silently for compatibility.
+        --no-remote)  shift ;;
         --no-update)  NO_UPDATE=true;  shift ;;
         --help|-h)
-            sed -n '3,9p' "$0" | sed 's/^# \?//'
+            sed -n '3,11p' "$0" | sed 's/^# \?//'
             exit 0 ;;
         *) INSTALLER_ARGS+=("$1"); shift ;;
     esac
@@ -154,10 +156,6 @@ run_update_guard
 PYTHON=""
 PYTHON_VER=""
 TKINTER_OK=false
-WG_OK=false
-VNC_OK=false
-WG_LABEL="not configured"
-VNC_LABEL="not configured"
 
 # ── WSL 2 / DISPLAY preparation ───────────────────────────────────────────────
 IS_WSL=false
@@ -176,7 +174,7 @@ if [[ "$IS_WSL" == true ]]; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-section "STEP 1  Prerequisites"
+section "Prerequisites"
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Python 3.10+ ──────────────────────────────────────────────────────────────
@@ -261,69 +259,6 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-section "STEP 2  Remote Access (WireGuard + TigerVNC)"
-# ══════════════════════════════════════════════════════════════════════════════
-
-if [[ "$NO_REMOTE" == true ]]; then
-    warn "Remote access setup skipped (--no-remote)"
-else
-    # ── Check current WireGuard status ────────────────────────────────────────
-    if systemctl is-active --quiet "wg-quick@wg0" 2>/dev/null; then
-        WG_IP=$(ip addr show wg0 2>/dev/null | grep 'inet ' | awk '{print $2}' | head -1 || echo "")
-        WG_LABEL="active${WG_IP:+ · ${WG_IP}}"
-        WG_OK=true
-        ok "WireGuard: ${WG_LABEL}"
-    elif [[ -f "/etc/wireguard/wg0.conf" ]]; then
-        WG_LABEL="configured — not running"
-        warn "WireGuard: ${WG_LABEL}"
-    else
-        fail "WireGuard: not configured"
-    fi
-
-    # ── Check current VNC status ──────────────────────────────────────────────
-    if systemctl is-active --quiet "pos-vnc" 2>/dev/null; then
-        VNC_LABEL="active · port 5901"
-        VNC_OK=true
-        ok "VNC Server:  ${VNC_LABEL}"
-    elif systemctl is-enabled --quiet "pos-vnc" 2>/dev/null; then
-        VNC_LABEL="configured — not running"
-        warn "VNC Server:  ${VNC_LABEL}"
-    else
-        fail "VNC Server:  not configured"
-    fi
-
-    # ── Run setup if anything is missing ─────────────────────────────────────
-    if [[ "$WG_OK" == false ]] || [[ "$VNC_OK" == false ]]; then
-        echo ""
-        if [[ ! -f "$REMOTE_SETUP" ]]; then
-            warn "setup-remote-access.sh not found in ${SCRIPT_DIR} — skipping"
-        else
-            info "Starting remote access setup..."
-            echo ""
-            divider
-            if [[ $EUID -eq 0 ]]; then
-                bash "$REMOTE_SETUP"
-            else
-                sudo bash "$REMOTE_SETUP"
-            fi
-            divider
-            echo ""
-
-            # ── Re-check after setup ──────────────────────────────────────────
-            if systemctl is-active --quiet "wg-quick@wg0" 2>/dev/null; then
-                WG_IP=$(ip addr show wg0 2>/dev/null | grep 'inet ' | awk '{print $2}' | head -1 || echo "")
-                WG_LABEL="active${WG_IP:+ · ${WG_IP}}"
-                WG_OK=true
-            fi
-            if systemctl is-active --quiet "pos-vnc" 2>/dev/null; then
-                VNC_LABEL="active · port 5901"
-                VNC_OK=true
-            fi
-        fi
-    fi
-fi
-
-# ══════════════════════════════════════════════════════════════════════════════
 section "STATUS SUMMARY"
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -336,35 +271,6 @@ if [[ "$TKINTER_OK" == true ]]; then
     status_row "Tkinter:" "available" "$GREEN"
 else
     status_row "Tkinter:" "missing" "$RED"
-fi
-
-echo ""
-
-if [[ "$NO_REMOTE" == false ]]; then
-    # WireGuard
-    if [[ "$WG_OK" == true ]]; then
-        status_row "WireGuard:" "$WG_LABEL" "$GREEN"
-    elif [[ -f "/etc/wireguard/wg0.conf" ]]; then
-        status_row "WireGuard:" "$WG_LABEL" "$YELLOW"
-    else
-        status_row "WireGuard:" "$WG_LABEL" "$RED"
-    fi
-
-    # VNC
-    if [[ "$VNC_OK" == true ]]; then
-        status_row "VNC Server:" "$VNC_LABEL" "$GREEN"
-    elif systemctl is-enabled --quiet "pos-vnc" 2>/dev/null; then
-        status_row "VNC Server:" "$VNC_LABEL" "$YELLOW"
-    else
-        status_row "VNC Server:" "$VNC_LABEL" "$RED"
-    fi
-
-    # WG public key (useful for admin reference)
-    if [[ -f "/etc/wireguard/pos-public.key" ]]; then
-        echo ""
-        WG_PUBKEY=$(cat /etc/wireguard/pos-public.key)
-        status_row "WG Public Key:" "${WG_PUBKEY}" "$CYAN"
-    fi
 fi
 
 echo ""
