@@ -12,7 +12,7 @@ name: point-of-sale-prod
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
+    max-size: "30m"
     max-file: "5"
     tag: "{{.Name}}"
 
@@ -199,7 +199,7 @@ services:
     environment:
       - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-point-of-sale-prod}
       - DEPLOYMENT_REPO=${DEPLOYMENT_REPO}
-      - MANAGED_SERVICES=backend,frontend,image-service
+      - MANAGED_SERVICES=backend,frontend,image-service,backup
       - DEPLOYMENT_ENV=/app/deployment/.env
       - COMPOSE_FILE=/app/deployment/docker-compose.prod.yml
       - DOCKER_CONFIG=/root/.docker
@@ -207,9 +207,29 @@ services:
       - HOST_COMPOSE_PROJECT_DIR=${HOST_COMPOSE_PROJECT_DIR}
       - DRY_RUN=${DRY_RUN:-false}
       - DRY_RUN_NEXT_VERSION=${DRY_RUN_NEXT_VERSION:-}
-      - CLEANUP_DELAY=${CLEANUP_DELAY:-86400}
       - CLEANUP_CHECK_INTERVAL=${CLEANUP_CHECK_INTERVAL:-3600}
       - POS_IMAGE_FILTER=${POS_IMAGE_FILTER:-pos-}
+      # Rolling multi-service manifest (schema:2/:3) — stable raw URL on pos-deployment.
+      - WEBSITE_UPDATE_METADATA_URL=${WEBSITE_UPDATE_METADATA_URL:-https://raw.githubusercontent.com/JahongirHabibov/pos-deployment/main/manifest.json}
+      - ONPREM_UPDATE_METADATA_URL=${ONPREM_UPDATE_METADATA_URL:-}
+      - UPDATE_CHANNEL=${UPDATE_CHANNEL:-stable}
+      # Pull automatically in the background; applying always needs an admin click.
+      - UPDATE_AUTO_DOWNLOAD=${UPDATE_AUTO_DOWNLOAD:-true}
+      - UPDATE_CHECK_INTERVAL_SECONDS=${UPDATE_CHECK_INTERVAL_SECONDS:-21600}
+      # Pre-apply database snapshot via the backup sidecar (blocking, aborts on failure).
+      - BACKUP_BASE_URL=${BACKUP_BASE_URL:-http://pos-backup:8300}
+      - BACKUP_SNAPSHOT_TIMEOUT=${BACKUP_SNAPSHOT_TIMEOUT:-600}
+      # Decoupled download: retry/backoff + stall detection on weak networks.
+      - PULL_RETRY_MAX=${PULL_RETRY_MAX:-4}
+      - PULL_RETRY_BASE_DELAY=${PULL_RETRY_BASE_DELAY:-5}
+      - PULL_RETRY_FACTOR=${PULL_RETRY_FACTOR:-3}
+      - PULL_STALL_TIMEOUT=${PULL_STALL_TIMEOUT:-120}
+      - PULL_ATTEMPT_TIMEOUT=${PULL_ATTEMPT_TIMEOUT:-1800}
+      # Disk preflight before download; refuse to start under this free-space floor.
+      - MIN_FREE_DISK_BYTES=${MIN_FREE_DISK_BYTES:-3221225472}
+      - DISK_CHECK_PATH=${DISK_CHECK_PATH:-/var/lib/docker}
+      # Cap the updater's own append-only audit log so it can't fill /var.
+      - AUDIT_LOG_MAX_BYTES=${AUDIT_LOG_MAX_BYTES:-10485760}
     networks:
       - pos-network
     healthcheck:

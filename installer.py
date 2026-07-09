@@ -218,33 +218,50 @@ def _write_pos_auth_json(user: str, token: str) -> None:
     _validate_ghcr_auth_file(POS_AUTH_FILE)
 
 
-def _fetch_recent_tags(repo: str, n: int = 4) -> list[str]:
-    """Return the n most recent release/tag names for a public GitHub repo.
+# Manifest service name → the installer field it prefills.
+_MANIFEST_FIELDS = {
+    "backend": "image_backend",
+    "frontend": "image_frontend",
+    "image-service": "image_service",
+    "updater": "image_updater",
+    "backup": "image_backup",
+}
 
-    Tries the Releases API first (sorted by published date), then falls back
-    to the Tags API. Returns an empty list on any error.
+
+def _fetch_manifest(repo: str) -> dict:
+    """Fetch the rolling manifest.json from the deployment repo's default branch.
+
+    manifest.json is the single machine-readable release source: CI writes one
+    entry per service, and the updater sidecar reads the same file. Per-service
+    release tags (backend-v1.4.2) made the old Releases/Tags API path useless —
+    it returned a flat list that could not be mapped back onto IMAGE_* fields.
+
+    Returns {} on any error; the installer then falls back to empty fields.
     """
-    for endpoint in (
-        f"https://api.github.com/repos/{repo}/releases?per_page={n}",
-        f"https://api.github.com/repos/{repo}/tags?per_page={n}",
-    ):
+    for branch in ("main", "master"):
+        url = f"https://raw.githubusercontent.com/{repo}/{branch}/manifest.json"
         try:
-            req = urllib.request.Request(
-                endpoint,
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-            )
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
-            names = [r.get("tag_name") or r.get("name", "") for r in data[:n]]
-            names = [name for name in names if name]
-            if names:
-                return names
+            if isinstance(data, dict) and isinstance(data.get("services"), dict):
+                return data
         except Exception:  # noqa: BLE001
             continue
-    return []
+    return {}
+
+
+def _manifest_images(manifest: dict) -> dict[str, str]:
+    """Map the manifest onto {installer_field: full_image_ref}."""
+    images: dict[str, str] = {}
+    for service, field in _MANIFEST_FIELDS.items():
+        entry = manifest.get("services", {}).get(service)
+        if not isinstance(entry, dict):
+            continue
+        image = str(entry.get("image", "")).strip()
+        if image:
+            images[field] = image
+    return images
 
 
 def _has_ghcr_credentials() -> tuple[bool, str]:
@@ -878,8 +895,15 @@ class InstallerApp:
             self._s1_entry_api_url.configure(state=state)
 
     def _fetch_and_show_tags(self, repo: str) -> None:
-        """Background worker: fetch recent tags and update the hint label."""
-        tags = _fetch_recent_tags(repo, 4)
+        """Background worker: prefill the IMAGE_* fields from the rolling manifest.
+
+        Empty fields are filled with the current release of each service; a value
+        the operator already typed is never overwritten. Enter accepts, typing
+        overrides (downgrade, private mirror, test build).
+        """
+        manifest = _fetch_manifest(repo)
+        images = _manifest_images(manifest)
+        updated_at = str(manifest.get("updated_at", ""))[:10]
 
         def _update() -> None:
             if not hasattr(self, "_s1_tags_hint"):
@@ -888,14 +912,22 @@ class InstallerApp:
                 self._s1_tags_hint.winfo_exists()
             except tk.TclError:
                 return
-            if tags:
-                hint = t("s1_recent_tags_label") + "  " + "  ·  ".join(tags)
-                self._s1_tags_hint.configure(text=hint, fg="#1b5e20")
-                if hasattr(self, "_s1_tags_frame") and self._s1_tags_frame.winfo_exists():
-                    self._s1_tags_frame.grid()
-            else:
-                self._s1_tags_hint.configure(
-                    text=t("s1_hint_fetch_err"), fg="#9e9e9e")
+
+            if not images:
+                self._s1_tags_hint.configure(text=t("s1_hint_fetch_err"), fg="#9e9e9e")
+                return
+
+            filled = 0
+            for field, image in images.items():
+                var = self._s1_vars.get(field)
+                if var is not None and not var.get().strip():
+                    var.set(image)
+                    filled += 1
+
+            hint = t("s1_manifest_prefilled").format(count=filled, date=updated_at or "—")
+            self._s1_tags_hint.configure(text=hint, fg="#1b5e20")
+            if hasattr(self, "_s1_tags_frame") and self._s1_tags_frame.winfo_exists():
+                self._s1_tags_frame.grid()
 
         self.root.after(0, _update)
 
