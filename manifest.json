@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-08T00:00:00Z",
+  "updated_at": "2026-07-10T08:27:34Z",
   "services": {
     "backend": {
       "version": "v0.3.96",
@@ -32,11 +32,60 @@
       "digest": null
     },
     "updater": {
-      "version": "v0.3.96",
-      "image": "ghcr.io/jahongirhabibov/pos-updater:0.3.96",
-      "date": "2026-07-08",
-      "changes": [],
-      "digest": null
+      "version": "v0.5.00",
+      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.00",
+      "digest": "sha256:ba8666db9cffcdeab856521c35bd6f465590b4a9dfcef338ad4fb0a9f13d862d",
+      "date": "2026-07-10",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "manifest-driven plan, gated apply, quarantined rollback"
+        },
+        {
+          "type": "feature",
+          "text": "right-aligned settings badge + semver-max release pick"
+        },
+        {
+          "type": "feature",
+          "text": "auto-detect updates + settings/tab badge (docker services)"
+        },
+        {
+          "type": "fix",
+          "text": "improve updater service state management and upgrade logic"
+        },
+        {
+          "type": "feature",
+          "text": "add Docker registry authentication support to upgrader"
+        },
+        {
+          "type": "feature",
+          "text": "add updater simulation framework for testing and validation"
+        },
+        {
+          "type": "feature",
+          "text": "enhance updater service with improved routes, upgrader, and version checking"
+        },
+        {
+          "type": "feature",
+          "text": "optimize updater and image service dockerfiles and dependencies"
+        },
+        {
+          "type": "feature",
+          "text": "major refactor of updater service with modular architecture and new utilities"
+        },
+        {
+          "type": "feature",
+          "text": "enhance updater service with improved error handling and logging"
+        },
+        {
+          "type": "feature",
+          "text": "significantly improve updater service and docker compose configuration"
+        },
+        {
+          "type": "fix",
+          "text": "read GHCR credentials from ~/.docker/config.json"
+        }
+      ]
     }
   }
 }
