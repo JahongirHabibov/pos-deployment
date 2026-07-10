@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-10T08:30:09Z",
+  "updated_at": "2026-07-10T08:48:09Z",
   "services": {
     "backend": {
       "version": "v0.5.10",
@@ -1739,70 +1739,14 @@
       "digest": null
     },
     "backup": {
-      "version": "v0.5.00",
-      "image": "ghcr.io/jahongirhabibov/pos-backup:0.5.00",
-      "digest": "sha256:92a25d32c7af1f46e7ce073d9ea182a1ba36d321b5389462826b46f119ec1da1",
+      "version": "v0.5.10",
+      "image": "ghcr.io/jahongirhabibov/pos-backup:0.5.10",
+      "digest": "sha256:5fba51d49a1fbbfb5aaaf029e9014c87b417f597e363f385cec2b168b890c177",
       "date": "2026-07-10",
       "changes": [
         {
           "type": "feature",
-          "text": "in-app admin/timezone setup + backup UI, drop env overhead"
-        },
-        {
-          "type": "fix",
-          "text": "detect empty backup archive and fail with clear error"
-        },
-        {
-          "type": "feature",
-          "text": "add image backup tab with teal accent, mirrored schedule/history/restore UI"
-        },
-        {
-          "type": "feature",
-          "text": "add image backup i18n keys (de/en/ru)"
-        },
-        {
-          "type": "feature",
-          "text": "add /api/image-backup/* endpoints (config, trigger, history, files, restore)"
-        },
-        {
-          "type": "feature",
-          "text": "add image restore engine with safety backup and rollback"
-        },
-        {
-          "type": "feature",
-          "text": "add image backup execution module (tar.gz of originals + images.db)"
-        },
-        {
-          "type": "feature",
-          "text": "add ImageBackupState, ImageRestoreStatus models and image config constants"
-        },
-        {
-          "type": "feature",
-          "text": "stabilize license hardware checks, re-activation, and test clock issue validation"
-        },
-        {
-          "type": "feature",
-          "text": "update localization for all languages and clean up dependencies"
-        },
-        {
-          "type": "feature",
-          "text": "improve backup service core functionality and UI templates"
-        },
-        {
-          "type": "feature",
-          "text": "update backup service localization for all supported languages"
-        },
-        {
-          "type": "feature",
-          "text": "enhance scheduler, state management, and UI templates"
-        },
-        {
-          "type": "feature",
-          "text": "refactor backup service with improved dockerfile and restore mechanisms"
-        },
-        {
-          "type": "fix",
-          "text": "update backup UI template"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
