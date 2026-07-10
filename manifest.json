@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-10T08:48:50Z",
+  "updated_at": "2026-07-10T08:57:41Z",
   "services": {
     "backend": {
       "version": "v0.5.10",
@@ -1732,11 +1732,28 @@
       ]
     },
     "image-service": {
-      "version": "v0.3.96",
-      "image": "ghcr.io/jahongirhabibov/pos-image-service:0.3.96",
-      "date": "2026-07-08",
-      "changes": [],
-      "digest": null
+      "version": "v0.5.10",
+      "image": "ghcr.io/jahongirhabibov/pos-image-service:0.5.10",
+      "digest": "sha256:aac4050228df570af2867abc3c59e703cb30164938d2161c2b476da1d7a0f04a",
+      "date": "2026-07-10",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "add /internal/restart endpoint for backup sidecar coordination"
+        },
+        {
+          "type": "feature",
+          "text": "optimize updater and image service dockerfiles and dependencies"
+        },
+        {
+          "type": "feature",
+          "text": "StaffMobileView, StaffTabletView, useCartManager, useProductCatalog"
+        },
+        {
+          "type": "feature",
+          "text": "production Docker setup with CI/CD pipeline"
+        }
+      ]
     },
     "backup": {
       "version": "v0.5.10",
