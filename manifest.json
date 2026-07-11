@@ -1,13 +1,13 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-11T18:10:25Z",
+  "updated_at": "2026-07-11T18:10:43Z",
   "services": {
     "backend": {
-      "version": "v0.5.11",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.11",
-      "digest": "sha256:42b36cda9ae78f093fd5cd1c807a15ee99873feab54e5dcb2a3fe73c0f79edb5",
-      "date": "2026-07-10",
+      "version": "v0.5.12",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.12",
+      "digest": "sha256:82450747494d75a3bcf88d1039ce6a25470b3a83a9af436b3ca5f5d69d439f90",
+      "date": "2026-07-11",
       "changes": [
         {
           "type": "feature",
