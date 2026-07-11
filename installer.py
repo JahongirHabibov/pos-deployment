@@ -251,17 +251,47 @@ def _fetch_manifest(repo: str) -> dict:
     return {}
 
 
-def _manifest_images(manifest: dict) -> dict[str, str]:
-    """Map the manifest onto {installer_field: full_image_ref}."""
-    images: dict[str, str] = {}
+def _image_tag(image_ref: str) -> str:
+    """Return the tag portion of a full image ref (part after the last ':').
+
+    Falls back to the whole ref when it carries no tag. A registry port
+    (host:5000/repo:tag) is unaffected — only the last ':' is split.
+    """
+    ref = str(image_ref).strip()
+    if ":" in ref:
+        return ref.rsplit(":", 1)[1]
+    return ref
+
+
+def _manifest_service_rows(manifest: dict) -> list[dict[str, str]]:
+    """Map the manifest onto ordered rows for the IMAGE_* fields.
+
+    Returns one dict per service that exists in BOTH the manifest and
+    _MANIFEST_FIELDS, in _MANIFEST_FIELDS order, each with:
+      service — manifest service name (e.g. "image-service")
+      field   — installer field key (e.g. "image_service")
+      image   — full image ref incl. tag
+      tag     — tag portion only (for display)
+    Services missing from the manifest are skipped (their field is left as-is).
+    """
+    rows: list[dict[str, str]] = []
+    services = manifest.get("services", {})
+    if not isinstance(services, dict):
+        return rows
     for service, field in _MANIFEST_FIELDS.items():
-        entry = manifest.get("services", {}).get(service)
+        entry = services.get(service)
         if not isinstance(entry, dict):
             continue
         image = str(entry.get("image", "")).strip()
-        if image:
-            images[field] = image
-    return images
+        if not image:
+            continue
+        rows.append({
+            "service": service,
+            "field": field,
+            "image": image,
+            "tag": _image_tag(image),
+        })
+    return rows
 
 
 def _has_ghcr_credentials() -> tuple[bool, str]:
@@ -816,7 +846,9 @@ class InstallerApp:
         self._s1_vars: dict[str, tk.StringVar] = {}
         self._s1_entry_otpk: tk.Entry | None = None
         self._s1_entry_api_url: tk.Entry | None = None
-        
+        # IMAGE_* entry widgets, so a manifest refresh can highlight changed rows.
+        self._s1_image_entries: dict[str, tk.Entry] = {}
+
         current_row = 6
         for key, label, secret, hint_key in fields:
             tk.Label(c, text=label, bg="white", anchor="w",
@@ -840,7 +872,9 @@ class InstallerApp:
                 self._s1_entry_otpk = entry
             elif key == "api_url":
                 self._s1_entry_api_url = entry
-            
+            elif key in _MANIFEST_FIELDS.values():
+                self._s1_image_entries[key] = entry
+
             current_row += 2
 
         # Timezone is configured in-app via the first-run Setup wizard
@@ -895,14 +929,15 @@ class InstallerApp:
             self._s1_entry_api_url.configure(state=state)
 
     def _fetch_and_show_tags(self, repo: str) -> None:
-        """Background worker: prefill the IMAGE_* fields from the rolling manifest.
+        """Background worker: set the IMAGE_* fields from the rolling manifest.
 
-        Empty fields are filled with the current release of each service; a value
-        the operator already typed is never overwritten. Enter accepts, typing
-        overrides (downgrade, private mirror, test build).
+        The manifest's full image ref (URL + tag) always replaces each field, so
+        an empty (new deployment), wrong, or outdated value self-heals to the
+        current release. Change detection only drives the per-service notice and
+        the highlight — the operator is asked to verify and can still edit a row.
         """
         manifest = _fetch_manifest(repo)
-        images = _manifest_images(manifest)
+        rows = _manifest_service_rows(manifest)
         updated_at = str(manifest.get("updated_at", ""))[:10]
 
         def _update() -> None:
@@ -913,19 +948,39 @@ class InstallerApp:
             except tk.TclError:
                 return
 
-            if not images:
+            if not rows:
                 self._s1_tags_hint.configure(text=t("s1_hint_fetch_err"), fg="#9e9e9e")
                 return
 
-            filled = 0
-            for field, image in images.items():
-                var = self._s1_vars.get(field)
-                if var is not None and not var.get().strip():
-                    var.set(image)
-                    filled += 1
+            # Reset every IMAGE_* row to the neutral background before re-marking.
+            for entry in self._s1_image_entries.values():
+                try:
+                    entry.configure(bg="white")
+                except tk.TclError:
+                    pass
 
-            hint = t("s1_manifest_prefilled").format(count=filled, date=updated_at or "—")
-            self._s1_tags_hint.configure(text=hint, fg="#1b5e20")
+            label_width = max(len(row["service"]) for row in rows)
+            lines = [t("s1_manifest_header").format(date=updated_at or "—")]
+            for row in rows:
+                var = self._s1_vars.get(row["field"])
+                if var is None:
+                    continue
+                changed = var.get().strip() != row["image"]
+                var.set(row["image"])
+                if changed:
+                    entry = self._s1_image_entries.get(row["field"])
+                    if entry is not None:
+                        try:
+                            entry.configure(bg="#fffde7")
+                        except tk.TclError:
+                            pass
+                line_key = "s1_manifest_row_changed" if changed else "s1_manifest_row_same"
+                lines.append(t(line_key).format(
+                    service=row["service"].ljust(label_width),
+                    tag=row["tag"],
+                ))
+
+            self._s1_tags_hint.configure(text="\n".join(lines), fg="#1b5e20")
             if hasattr(self, "_s1_tags_frame") and self._s1_tags_frame.winfo_exists():
                 self._s1_tags_frame.grid()
 
