@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-24T10:29:05Z",
+  "updated_at": "2026-07-24T13:49:36Z",
   "services": {
     "backend": {
       "version": "v0.5.17",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.17",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.17",
-      "digest": "sha256:d9e5ac790752dfd1445e2df51e2f83bfd2842ae1dc97d0de1b220ba0cc5e92b9",
+      "version": "v0.5.20",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.20",
+      "digest": "sha256:bcc2e36184792cb6b0c1e908fb054ee09aab26f9f9112654b068f6de6823673e",
       "date": "2026-07-24",
       "changes": [
         {
-          "type": "perf",
-          "text": "index every FK column, kill report N+1s, unblock DB pool from printer I/O"
+          "type": "fix",
+          "text": "unpaid orders no longer count as revenue; order management UX pass"
         }
       ]
     },
