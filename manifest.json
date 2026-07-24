@@ -1,21 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-24T15:00:20Z",
+  "updated_at": "2026-07-24T15:01:26Z",
   "services": {
     "backend": {
-      "version": "v0.5.20",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.20",
-      "digest": "sha256:3cd651703c980e33ea399ceff01aabd029fc380948f3a94d891cc7069ada9516",
+      "version": "v0.5.21",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.21",
+      "digest": "sha256:c95e744cde6314483a61fe6de0f9d921330a359e40b94c77ceee40af998493b5",
       "date": "2026-07-24",
       "changes": [
         {
-          "type": "fix",
-          "text": "correct three money calculations affected by order corrections"
-        },
-        {
-          "type": "fix",
-          "text": "unpaid orders no longer count as revenue; order management UX pass"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
