@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-24T16:38:39Z",
+  "updated_at": "2026-07-24T16:38:55Z",
   "services": {
     "backend": {
       "version": "v0.5.22",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.21",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.21",
-      "digest": "sha256:183a9e2686487670840bd50269ab87c26fbc1af28e7e204d5b22c5936c4da798",
+      "version": "v0.5.22",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.22",
+      "digest": "sha256:5b6f694a1930f02d8b36f9d0f5c0eb590be0461dd637bd66b25286138f18e909",
       "date": "2026-07-24",
       "changes": [
         {
           "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "text": "server-side parking for To-Go carts"
         }
       ]
     },
