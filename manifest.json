@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-24T10:28:52Z",
+  "updated_at": "2026-07-24T10:29:05Z",
   "services": {
     "backend": {
       "version": "v0.5.17",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.16",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.16",
-      "digest": "sha256:2fd91db594e5247e30aa97d1a6b0f984064f609df0a690bcd142808511981e5f",
-      "date": "2026-07-22",
+      "version": "v0.5.17",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.17",
+      "digest": "sha256:d9e5ac790752dfd1445e2df51e2f83bfd2842ae1dc97d0de1b220ba0cc5e92b9",
+      "date": "2026-07-24",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "perf",
+          "text": "index every FK column, kill report N+1s, unblock DB pool from printer I/O"
         }
       ]
     },
