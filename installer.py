@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -227,8 +228,41 @@ _MANIFEST_FIELDS = {
     "backup": "image_backup",
 }
 
+# Public deployment repo that hosts the rolling manifest.json. Baked in so a
+# FIRST install — where no .env exists yet — still prefills the IMAGE_* fields;
+# a concrete DEPLOYMENT_REPO in .env always wins over this default.
+DEFAULT_DEPLOYMENT_REPO = "JahongirHabibov/pos-deployment"
 
-def _fetch_manifest(repo: str) -> dict:
+# A GitHub "<owner>/<name>" pair — deliberately strict so template placeholders
+# such as "<org>/pos-deployment" are rejected instead of fetched (and 404'd).
+_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def _is_usable_repo(repo: str) -> bool:
+    """True when *repo* is a concrete <owner>/<name>, not a template placeholder."""
+    return bool(_REPO_RE.match(str(repo).strip()))
+
+
+def _resolve_deployment_repo(value: str) -> str:
+    """Return the repo to read manifest.json from: operator value, else default."""
+    value = str(value).strip()
+    return value if _is_usable_repo(value) else DEFAULT_DEPLOYMENT_REPO
+
+
+def _manifest_url(repo: str, branch: str) -> str:
+    """Raw manifest URL with a cache-buster.
+
+    raw.githubusercontent.com answers with ``cache-control: max-age=300``, so a
+    plain URL can serve a manifest up to 5 minutes stale — long enough for an
+    installer run started right after a release to miss the newest tags. The
+    query string is ignored by the origin but is part of the CDN cache key.
+    """
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    return (f"https://raw.githubusercontent.com/{repo}/{branch}"
+            f"/manifest.json?_={stamp}")
+
+
+def _fetch_manifest(repo: str) -> tuple[dict, str]:
     """Fetch the rolling manifest.json from the deployment repo's default branch.
 
     manifest.json is the single machine-readable release source: CI writes one
@@ -236,19 +270,36 @@ def _fetch_manifest(repo: str) -> dict:
     release tags (backend-v1.4.2) made the old Releases/Tags API path useless —
     it returned a flat list that could not be mapped back onto IMAGE_* fields.
 
-    Returns {} on any error; the installer then falls back to empty fields.
+    Returns (manifest, "") on success and ({}, reason) on failure. The reason is
+    surfaced in the GUI so a deployer sees WHY no tags showed up (wrong repo,
+    offline, proxy) instead of a bare "could not retrieve versions".
     """
+    if not _is_usable_repo(repo):
+        return {}, f"invalid repo '{repo}'"
+    reason = ""
     for branch in ("main", "master"):
-        url = f"https://raw.githubusercontent.com/{repo}/{branch}/manifest.json"
         try:
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            req = urllib.request.Request(
+                _manifest_url(repo, branch),
+                headers={
+                    "Accept": "application/json",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+            )
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
             if isinstance(data, dict) and isinstance(data.get("services"), dict):
-                return data
-        except Exception:  # noqa: BLE001
-            continue
-    return {}
+                return data, ""
+            detail = "manifest.json has no 'services' object"
+        except urllib.error.HTTPError as exc:
+            detail = f"HTTP {exc.code}"
+        except Exception as exc:  # noqa: BLE001
+            detail = str(exc)
+        # Keep the FIRST failure: "main" is the real default branch, so its
+        # reason is the diagnostic one — the "master" retry always 404s.
+        reason = reason or f"{branch}: {detail}"
+    return {}, reason
 
 
 def _image_tag(image_ref: str) -> str:
@@ -426,8 +477,12 @@ class InstallerApp:
 
         Only fills keys that are not already set; never touches secrets that
         are not persisted in .env (OTPK, sudo password, GHCR credentials).
+
+        DEPLOYMENT_REPO is special: it is always resolved, even without a .env,
+        so a first install still knows where to read manifest.json from.
         """
         if not ENV_FILE.is_file():
+            self._data["deployment_repo"] = DEFAULT_DEPLOYMENT_REPO
             return
         env_vals = _read_env_keys([
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
@@ -448,6 +503,11 @@ class InstallerApp:
             value = env_vals.get(env_key, "")
             if value:
                 self._data[data_key] = value
+        # A missing key, or the "<org>/pos-deployment" placeholder copied from
+        # .env.example, must not silently disable the manifest prefill.
+        self._data["deployment_repo"] = _resolve_deployment_repo(
+            self._data.get("deployment_repo", "")
+        )
         # Auto-check "skip provisioning" if PROVISION_DONE=true
         if env_vals.get("PROVISION_DONE", "").lower() == "true":
             self._data["_already_prov"] = "1"
@@ -884,7 +944,7 @@ class InstallerApp:
             if self._s1_tags_fetch_after_id is not None:
                 self.root.after_cancel(self._s1_tags_fetch_after_id)
             repo = self._s1_vars["deployment_repo"].get().strip()
-            if repo and "/" in repo:
+            if _is_usable_repo(repo):
                 self._s1_tags_hint.configure(
                     text=t("s1_hint_fetching"), fg="#555555")
                 self._s1_tags_frame.grid()
@@ -936,7 +996,7 @@ class InstallerApp:
         current release. Change detection only drives the per-service notice and
         the highlight — the operator is asked to verify and can still edit a row.
         """
-        manifest = _fetch_manifest(repo)
+        manifest, error = _fetch_manifest(repo)
         rows = _manifest_service_rows(manifest)
         updated_at = str(manifest.get("updated_at", ""))[:10]
 
@@ -949,7 +1009,12 @@ class InstallerApp:
                 return
 
             if not rows:
-                self._s1_tags_hint.configure(text=t("s1_hint_fetch_err"), fg="#9e9e9e")
+                # Name the failure — a silent grey line left deployers guessing
+                # whether the repo was wrong, the host offline or CI behind.
+                text = t("s1_hint_fetch_err")
+                if error:
+                    text = f"{text}  ({repo} → {error})"
+                self._s1_tags_hint.configure(text=text, fg="#c62828")
                 return
 
             # Reset every IMAGE_* row to the neutral background before re-marking.

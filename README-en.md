@@ -53,14 +53,16 @@ Required input data from the developer/distributor or Legisell admin:
 | IMAGE_IMAGE_SERVICE | Image service tag written to `.env`. |
 | IMAGE_UPDATER | Updater sidecar tag written to `.env`. |
 | IMAGE_BACKUP | Backup sidecar tag written to `.env`. |
-| DEPLOYMENT_REPO | Repo in `org/pos-deployment` format; used for release/tag hints and stored in `.env`. |
+| DEPLOYMENT_REPO | Repo in `org/pos-deployment` format; source of `manifest.json` and stored in `.env`. Pre-filled with the official repo, so a first install (no `.env` yet) still gets the latest tags. |
 | Path to pos-deployment (`HOST_COMPOSE_PROJECT_DIR`) | Absolute host path to this deployment directory; required by updater self-update and bind-mount path resolution. |
 
 > Timezone, administrator login (ID `0001`, 6-digit PIN, optional e-mail) are configured in-app during the first-run Setup wizard and stored in the database — not in `.env`.
 
 Notes:
 - If `.env` already exists, relevant fields are pre-filled automatically.
-- Recent tags are fetched automatically for `DEPLOYMENT_REPO` (display hint).
+- The latest release tags are read from `manifest.json` on `DEPLOYMENT_REPO` and
+  written into the `IMAGE_*` fields; changed rows are highlighted. If the fetch
+  fails, the box states the reason (wrong repo, HTTP status, offline).
 
 ### Step 2 — Docker Login
 
