@@ -1,21 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-26T18:34:58Z",
+  "updated_at": "2026-07-26T18:35:24Z",
   "services": {
     "backend": {
-      "version": "v0.5.25",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.25",
-      "digest": "sha256:a5eac4df65e2d7aca4f9eb0da0d59e969f780a4fb0a959cc6931a2c625cfb129",
-      "date": "2026-07-24",
+      "version": "v0.5.26",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.26",
+      "digest": "sha256:c49fb00187730b2fae170fc23c29e3d624fa45e171fe10c41c146662daac9059",
+      "date": "2026-07-26",
       "changes": [
         {
-          "type": "fix",
-          "text": "derive access-token lifetime from settings instead of a literal"
-        },
-        {
           "type": "feature",
-          "text": "blocker list explains each blocker and links to where it is cleared"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
