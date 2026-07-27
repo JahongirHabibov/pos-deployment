@@ -58,11 +58,22 @@ if [[ -n "${ORIGINS}" ]]; then
 [Service]
 Environment=KASSIO_POWER_ALLOWED_ORIGINS=${ORIGINS}
 EOF
+elif [[ -f "/etc/systemd/system/${UNIT_NAME}.d/origins.conf" ]]; then
+  # A re-run without --origins keeps whatever restriction is already in place.
+  # Dropping it here would silently widen access on an ordinary reinstall; say
+  # so instead, so the effective config is never a surprise.
+  existing="$(sed -n 's/^Environment=KASSIO_POWER_ALLOWED_ORIGINS=//p' \
+    "/etc/systemd/system/${UNIT_NAME}.d/origins.conf")"
+  echo "Keeping existing origin restriction: ${existing:-<empty>}"
+  echo "  (pass --origins to change it, or remove /etc/systemd/system/${UNIT_NAME}.d/origins.conf)"
 fi
 
 systemctl daemon-reload
 systemctl enable "${UNIT_NAME}"
-systemctl restart "${UNIT_NAME}"
+if ! systemctl restart "${UNIT_NAME}"; then
+  echo "Failed to start ${UNIT_NAME}. Check: journalctl -u ${UNIT_NAME} -n 50" >&2
+  exit 1
+fi
 
 # Health check via python3 rather than curl: a minimal kiosk image may not ship
 # curl, but python3 is already a hard requirement for the agent itself.

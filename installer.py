@@ -1610,9 +1610,11 @@ class InstallerApp:
             self._data["sudo_password"] = sudo_password_in
 
         # Tk variables must be read on the main thread — hand the value to the
-        # worker as plain data.
-        if self._s3_kiosk_var is not None:
-            self._data["install_kiosk_agent"] = bool(self._s3_kiosk_var.get())
+        # worker as plain data. getattr: the widget only exists when step 3 was
+        # built with the checkbox visible.
+        kiosk_var = getattr(self, "_s3_kiosk_var", None)
+        if kiosk_var is not None:
+            self._data["install_kiosk_agent"] = bool(kiosk_var.get())
 
         self._btn_back.configure(state=tk.DISABLED)
 
@@ -1907,8 +1909,11 @@ class InstallerApp:
                     self._log(self._s3_log,
                               t("s3_log_url", port=port), "#7ec8e3")
 
-                    # Remember the choice so a re-run pre-ticks the box.
-                    if self._s3_kiosk_var is not None:
+                    # Remember the choice so a re-run pre-ticks the box. Note
+                    # that unticking only stops future installs — an agent that
+                    # is already on the machine keeps running until it is
+                    # removed by hand (see kiosk-agent/README.md).
+                    if getattr(self, "_s3_kiosk_var", None) is not None:
                         wanted = bool(self._data.get("install_kiosk_agent"))
                         _patch_env_keys({KIOSK_AGENT_ENV_KEY: "true" if wanted else "false"})
                         if wanted:

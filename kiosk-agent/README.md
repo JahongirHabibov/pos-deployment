@@ -32,6 +32,21 @@ sudo ./install.sh --origins http://192.168.1.50
 Either way the script copies the agent to `/opt/kassio-power-agent`, installs
 the systemd unit, enables it and verifies `/health`.
 
+## Uninstall
+
+Unticking the installer checkbox only stops future installs — an agent already
+on the machine keeps running. Remove it explicitly:
+
+```bash
+sudo systemctl disable --now kassio-power-agent
+sudo rm -rf /etc/systemd/system/kassio-power-agent.service \
+            /etc/systemd/system/kassio-power-agent.service.d \
+            /opt/kassio-power-agent
+sudo systemctl daemon-reload
+```
+
+The POS hides its power button again as soon as `/health` stops answering.
+
 ## API
 
 Bound to `127.0.0.1:9110`.
