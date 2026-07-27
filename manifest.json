@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-26T18:35:24Z",
+  "updated_at": "2026-07-27T16:32:09Z",
   "services": {
     "backend": {
       "version": "v0.5.26",
@@ -16,14 +16,18 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.26",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.26",
-      "digest": "sha256:bd1aefd4d0c1092cd1120b96169ceca5b55ae7ab0c9710be11bf5abc9559fff8",
-      "date": "2026-07-26",
+      "version": "v0.5.27",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.27",
+      "digest": "sha256:40d7e9cdeba16ead2b820237a0e49365434630da588336bc798ec150d8d3b9a5",
+      "date": "2026-07-27",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "fix",
+          "text": "harden the boot gate and the power-off overlay"
+        },
+        {
+          "type": "fix",
+          "text": "wait for the backend instead of showing a dead login screen"
         }
       ]
     },
