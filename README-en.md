@@ -87,6 +87,7 @@ Notes:
 |---|---|
 | Sudo Password (conditional) | Only shown if no sudo password is already available from Step 2 / state. Required to run final Docker operations. |
 | Show password (checkbox) | Visibility toggle only. |
+| Install kiosk power agent (checkbox) | Installs `kiosk-agent/` as a systemd service on this machine so the POS login screen can shut it down. Off by default; the choice is stored as `POS_KIOSK_AGENT` in `.env` and pre-filled on the next run. Hidden in WSL 2 mode. See "Kiosk Power Agent" below. |
 
 This step also shows a read-only summary (API URL, GHCR user, app/port/db/image values) and live deployment logs.
 
@@ -100,6 +101,33 @@ This step also shows a read-only summary (API URL, GHCR user, app/port/db/image 
 - Network `pos-network` is created automatically by Docker Compose from `docker-compose.prod.yml` — no separate creation step is needed.
 - Runs `docker compose pull` with a progress spinner (output is buffered internally, not streamed line-by-line) and `docker compose up -d` with live streaming logs.
 - Stores deployment logs under `logs/deploy-<timestamp>.log`.
+
+---
+
+## Kiosk Power Agent
+
+Kiosk terminals boot into a locked-down browser: no desktop, no window
+controls, no power menu. Staff cannot switch such a device off. Browser
+JavaScript cannot power off a machine either, and the backend must not do it —
+in mixed deployments it runs on a server while the user stands in front of a
+different terminal, so a backend-side shutdown would hit the wrong machine.
+
+`kiosk-agent/` closes that gap: a loopback-only HTTP service on
+`127.0.0.1:9110`, installed per machine. The POS login screen probes it and
+shows a power-off button only where it answers. It runs as root via systemd,
+which is what makes the shutdown work without a sudo password or a polkit
+prompt.
+
+- **On this Docker host:** tick *Install kiosk power agent* in step 3. The
+  installer runs `kiosk-agent/install.sh` with the sudo password it already
+  has and pins the accepted origin to the local POS URL.
+- **On terminals without this repo** (browser-only thin clients): run
+  `sudo kiosk-agent/install.sh --origins http://<pos-url>` there by hand, or
+  bake it into the kiosk image.
+- **On a server in a rack:** leave it unchecked. Nothing else changes.
+
+A failed agent install never fails the deployment — the POS simply hides its
+power button. Details, API and security model: `kiosk-agent/README.md`.
 
 ---
 

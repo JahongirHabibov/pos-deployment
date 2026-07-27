@@ -1,0 +1,41 @@
+[Unit]
+Description=KASSIO Power Agent (local poweroff endpoint for kiosk terminals)
+Documentation=file:/opt/kassio-power-agent/README.md
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/kassio-power-agent/kassio_power_agent.py
+Restart=always
+RestartSec=2
+
+# Runs as root on purpose: that is what makes the poweroff work without a
+# sudo password or a polkit prompt. The hardening below is what keeps that
+# privilege from being useful for anything else.
+User=root
+Environment=KASSIO_POWER_HOST=127.0.0.1
+Environment=KASSIO_POWER_PORT=9110
+# Lock the agent to the POS URL(s) once they are known, e.g.
+# Environment=KASSIO_POWER_ALLOWED_ORIGINS=http://192.168.1.50,http://localhost
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+# "full" rather than "strict": systemctl talks to systemd through a socket
+# under /run, and strict would mount that read-only.
+ProtectSystem=full
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+# Only the loopback interface — the agent must never be reachable over the LAN.
+IPAddressAllow=localhost
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

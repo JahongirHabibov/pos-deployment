@@ -35,6 +35,8 @@ PROVISION_PY    = REPO_DIR / "provision.py"
 COMPOSE_FILE    = REPO_DIR / "docker-compose.prod.yml"
 LOCALES_DIR     = REPO_DIR / "locales"
 POS_AUTH_FILE   = Path.home() / ".docker" / "pos-auth.json"
+KIOSK_AGENT_DIR = REPO_DIR / "kiosk-agent"
+KIOSK_AGENT_INSTALL = KIOSK_AGENT_DIR / "install.sh"
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 C_BRAND     = "#1a1a2e"
@@ -355,6 +357,40 @@ def _has_ghcr_credentials() -> tuple[bool, str]:
     """
     path, _ = _find_ghcr_auth_file()
     return (True, str(path)) if path else (False, "")
+
+
+# ── Kiosk power agent ────────────────────────────────────────────────────────
+# The agent powers the host off on request, which no container can do, so it is
+# installed on the machine itself instead of shipped as an image. Only terminals
+# that run this repo are covered here; thin clients get it from their kiosk
+# image (see kiosk-agent/README.md).
+KIOSK_AGENT_ENV_KEY = "POS_KIOSK_AGENT"
+
+
+def _step3_row_offsets(show_sudo: bool, show_kiosk: bool) -> tuple[int, int, int]:
+    """Grid-row offsets for the optional widgets on step 3.
+
+    Each optional block takes two rows (input plus its hint/toggle). The log
+    widget has to start below whatever is actually shown — get this wrong and
+    the log overlaps the sudo field or the kiosk checkbox.
+
+    Returns (sudo_offset, kiosk_offset, total).
+    """
+    sudo = 2 if show_sudo else 0
+    kiosk = 2 if show_kiosk else 0
+    return sudo, kiosk, sudo + kiosk
+
+
+def _kiosk_agent_origin(port: str) -> str:
+    """Browser origin of the POS on this host — the only origin the agent accepts.
+
+    The kiosk session opens the POS on the machine itself, so the origin is
+    always localhost; only a non-default public port has to be spelled out.
+    """
+    port = (port or "80").strip()
+    if port in ("", "80"):
+        return "http://localhost"
+    return f"http://localhost:{port}"
 
 
 def _read_env_keys(keys: list[str]) -> dict[str, str]:
@@ -1501,11 +1537,15 @@ class InstallerApp:
         ).grid(row=next_row+1, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
         # Sudo-Passwort-Feld — nur anzeigen wenn Schritt 2 übersprungen wurde und nicht WSL 2 Modus
+        show_sudo = not self._data.get("sudo_password") and not self._data.get("wsl2")
+        # Kiosk-Power-Agent — nur wo es einen systemd-Host zum Ausschalten gibt.
+        show_kiosk = KIOSK_AGENT_INSTALL.is_file() and not self._data.get("wsl2")
+        sudo_row_offset, _kiosk_row_offset, extra_rows = _step3_row_offsets(
+            show_sudo, show_kiosk)
+
         self._s3_sudo_var: tk.StringVar | None = None
         self._s3_sudo_entry: tk.Entry | None = None
-        sudo_row_offset = 0
-        if not self._data.get("sudo_password") and not self._data.get("wsl2"):
-            sudo_row_offset = 2
+        if show_sudo:
             tk.Label(c, text=t("s3_lbl_sudo"), bg="white",
                      font=("Segoe UI", self._get_font_size(10), "bold"), width=26, anchor="w").grid(
                 row=next_row+2, column=0, sticky="w", pady=(4, 2))
@@ -1522,9 +1562,30 @@ class InstallerApp:
                 bg="white", font=("Segoe UI", self._get_font_size(9)),
             ).grid(row=next_row+3, column=1, sticky="w", padx=(0, 0), pady=(2, 0))
 
+        # ── Kiosk power agent — optional host-level install ────────────────
+        # Hidden under WSL 2: there is no systemd host to power off there.
+        self._s3_kiosk_var: tk.BooleanVar | None = None
+        if show_kiosk:
+            enabled_before = _read_env_keys([KIOSK_AGENT_ENV_KEY]).get(
+                KIOSK_AGENT_ENV_KEY, "").strip().lower() == "true"
+            self._s3_kiosk_var = tk.BooleanVar(value=enabled_before)
+            tk.Checkbutton(
+                c, text=t("s3_kiosk_agent"),
+                variable=self._s3_kiosk_var,
+                bg="white", font=("Segoe UI", self._get_font_size(10)),
+                anchor="w", justify=tk.LEFT,
+            ).grid(row=next_row+2+sudo_row_offset, column=0, columnspan=2,
+                   sticky="w", pady=(6, 0))
+            tk.Label(
+                c, text=t("s3_kiosk_agent_hint"), bg="white", fg="#555",
+                font=("Segoe UI", self._get_font_size(9)),
+                wraplength=self._get_wraplength(560), anchor="w", justify=tk.LEFT,
+            ).grid(row=next_row+3+sudo_row_offset, column=0, columnspan=2,
+                   sticky="w", pady=(0, 4))
+
         tk.Label(c, text=t("s3_lbl_log"), bg="white",
                  font=("Segoe UI", self._get_font_size(10), "bold")).grid(
-            row=next_row+2+sudo_row_offset, column=0, columnspan=2, sticky="w", pady=(4, 2))
+            row=next_row+2+extra_rows, column=0, columnspan=2, sticky="w", pady=(4, 2))
 
         self._s3_log = scrolledtext.ScrolledText(
             c, height=15, width=82, font=("Courier", self._get_font_size(9)),
@@ -1533,9 +1594,9 @@ class InstallerApp:
             insertbackground="white",
             relief=tk.SOLID, bd=1,
         )
-        self._s3_log.grid(row=next_row+3+sudo_row_offset, column=0, columnspan=2, sticky="ew")
+        self._s3_log.grid(row=next_row+3+extra_rows, column=0, columnspan=2, sticky="ew")
         c.columnconfigure(1, weight=1)
-        c.rowconfigure(next_row+3+sudo_row_offset, weight=1)
+        c.rowconfigure(next_row+3+extra_rows, weight=1)
 
     def _run_step3(self) -> None:
         self._btn_next.configure(state=tk.DISABLED)  # sofortiges Deaktivieren (verhindert Doppelklick)
@@ -1547,6 +1608,11 @@ class InstallerApp:
                 self._btn_next.configure(state=tk.NORMAL)
                 return
             self._data["sudo_password"] = sudo_password_in
+
+        # Tk variables must be read on the main thread — hand the value to the
+        # worker as plain data.
+        if self._s3_kiosk_var is not None:
+            self._data["install_kiosk_agent"] = bool(self._s3_kiosk_var.get())
 
         self._btn_back.configure(state=tk.DISABLED)
 
@@ -1758,6 +1824,54 @@ class InstallerApp:
                     
                     return p
 
+                def _install_kiosk_agent(port: str) -> None:
+                    """Install/refresh the local power agent after a successful deploy.
+
+                    Runs last on purpose: a failure here must not read as a failed
+                    deployment. Without the agent the POS simply hides its power
+                    button, everything else keeps working.
+                    """
+                    origin = _kiosk_agent_origin(port)
+                    self._log(self._s3_log, "")
+                    self._log(
+                        self._s3_log,
+                        f"▶ sudo kiosk-agent/install.sh --origins {origin}",
+                        "#7ec8e3",
+                    )
+                    cmd = ["sudo", "-k", "-S", "bash", str(KIOSK_AGENT_INSTALL),
+                           "--origins", origin]
+                    try:
+                        p = subprocess.Popen(
+                            cmd,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            cwd=str(REPO_DIR),
+                            env=env,
+                        )
+                    except OSError as exc:
+                        self._log(self._s3_log,
+                                  t("s3_kiosk_agent_fail", exc=str(exc)), C_DANGER)
+                        return
+                    assert p.stdin is not None
+                    p.stdin.write(sudo_password + "\n")
+                    p.stdin.flush()
+                    p.stdin.close()
+                    assert p.stdout is not None
+                    for line in p.stdout:
+                        clean = line.rstrip()
+                        if clean.startswith("[sudo]"):
+                            continue
+                        self._log(self._s3_log, clean)
+                    p.wait()
+                    if p.returncode == 0:
+                        self._log(self._s3_log, t("s3_kiosk_agent_ok"), C_SUCCESS)
+                    else:
+                        self._log(self._s3_log,
+                                  t("s3_kiosk_agent_fail", exc=f"exit {p.returncode}"),
+                                  C_DANGER)
+
                 # ── Step 1: Pull latest images ────────────────────────────
                 self._log(self._s3_log, "")
                 self._log(self._s3_log,
@@ -1792,6 +1906,13 @@ class InstallerApp:
                     self._log(self._s3_log, t("s3_log_success"), C_SUCCESS)
                     self._log(self._s3_log,
                               t("s3_log_url", port=port), "#7ec8e3")
+
+                    # Remember the choice so a re-run pre-ticks the box.
+                    if self._s3_kiosk_var is not None:
+                        wanted = bool(self._data.get("install_kiosk_agent"))
+                        _patch_env_keys({KIOSK_AGENT_ENV_KEY: "true" if wanted else "false"})
+                        if wanted:
+                            _install_kiosk_agent(port)
 
                     def _finish():
                         self._btn_next.configure(
