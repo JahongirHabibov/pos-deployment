@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-28T16:18:00Z",
+  "updated_at": "2026-07-28T18:15:12Z",
   "services": {
     "backend": {
       "version": "v0.5.31",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.31",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.31",
-      "digest": "sha256:6d58f3a92495c5f12645bc5b8147bb61696c346c8790a5b49d2d82cd484d1e7d",
+      "version": "v0.5.32",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.32",
+      "digest": "sha256:7332af91b37942acbdbad0166dfa91e2ae3ff14c3eb8454641023c91fbc8b81d",
       "date": "2026-07-28",
       "changes": [
         {
-          "type": "fix",
-          "text": "scope the order list to what the waiter may act on"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
