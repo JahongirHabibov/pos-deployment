@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-29T18:12:40Z",
+  "updated_at": "2026-07-29T18:13:10Z",
   "services": {
     "backend": {
       "version": "v0.5.33",
@@ -20,14 +20,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.33",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.33",
-      "digest": "sha256:f536a92f24738ba6a14e6a2edfdcc3fd66055cb137fd941852b2864445558fa6",
+      "version": "v0.5.34",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.34",
+      "digest": "sha256:4c6a950730407a0a34a19089bc6eb2226494039ab13c6c35c30d57afa1a9e63a",
       "date": "2026-07-29",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "perf",
+          "text": "stop the 401 refresh storm and the repeated work behind it"
         }
       ]
     },
