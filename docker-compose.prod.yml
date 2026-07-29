@@ -25,6 +25,39 @@ services:
     container_name: pos-database
     hostname: pos-database
     env_file: .env
+    environment:
+      TZ: ${TZ:-UTC}
+    # Postgres ships defaults sized for a machine it knows nothing about, and
+    # nothing here ever overrode them. The two that actually hurt on a POS box:
+    #
+    #   random_page_cost=4.0 assumes a spinning disk. On the SSD every one of
+    #   these terminals runs on, it makes the planner value an index scan at
+    #   four times its real cost and fall back to sequential scans — including
+    #   over the foreign-key indexes added specifically to stop that.
+    #
+    #   shared_buffers=128MB means the hot working set is re-read from the OS
+    #   cache constantly.
+    #
+    # Sized for the 8 GB terminals in the field, leaving room for the other
+    # containers and the kiosk browser. effective_cache_size is only a planner
+    # hint, not an allocation.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+    # Docker's default /dev/shm is 64 MB. Postgres puts parallel-query state
+    # there and errors out with "could not resize shared memory segment".
+    shm_size: 256mb
     volumes:
       - pos-db-data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro
@@ -161,6 +194,10 @@ services:
     image: ${IMAGE_IMAGE_SERVICE}
     container_name: pos-image-service
     hostname: pos-image-service
+    # No env_file here, so TZ has to be passed explicitly or the service
+    # timestamps in UTC while the rest of the stack runs local time.
+    environment:
+      TZ: ${TZ:-UTC}
     # Port not exposed: proxied via the frontend Nginx (/images/)
     volumes:
       - pos-image-data:/data/images
@@ -197,6 +234,8 @@ services:
         bind:
           create_host_path: false
     environment:
+      # No env_file on this service — TZ must be passed explicitly.
+      - TZ=${TZ:-UTC}
       - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-point-of-sale-prod}
       - DEPLOYMENT_REPO=${DEPLOYMENT_REPO}
       - MANAGED_SERVICES=backend,frontend,image-service,backup

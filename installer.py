@@ -1874,6 +1874,75 @@ class InstallerApp:
                                   t("s3_kiosk_agent_fail", exc=f"exit {p.returncode}"),
                                   C_DANGER)
 
+                def _sudo_capture(cmd: list[str], timeout: int = 20):
+                    """Run a sudo command, feed the password, return the process."""
+                    p = subprocess.Popen(
+                        ["sudo", "-k", "-S", *cmd],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        cwd=str(REPO_DIR),
+                        env=env,
+                    )
+                    out, _ = p.communicate(sudo_password + "\n", timeout=timeout)
+                    return p.returncode, "\n".join(
+                        line for line in (out or "").splitlines()
+                        if not line.startswith("[sudo]")
+                    ).strip()
+
+                def _ensure_clock_sync() -> None:
+                    """Turn on network time and copy the host timezone into .env.
+
+                    The licence layer refuses to run on a clock that has moved
+                    backwards — that is what stops a backdated machine from
+                    outliving its licence. A POS terminal that gets switched off
+                    every night and has a tired CMOS battery drifts into exactly
+                    that state on its own, and then the whole system reports
+                    "not licensed". Nothing in this installer used to enable a
+                    time source, so the drift was never corrected.
+
+                    Advisory: a machine without systemd-timesyncd still deploys,
+                    it just gets told what to fix.
+                    """
+                    self._log(self._s3_log, "")
+                    self._log(self._s3_log, "▶ timedatectl set-ntp true", "#7ec8e3")
+                    try:
+                        rc, out = _sudo_capture(["timedatectl", "set-ntp", "true"])
+                        if rc != 0:
+                            self._log(self._s3_log,
+                                      t("s3_clock_sync_fail", exc=out or f"exit {rc}"),
+                                      C_DANGER)
+                        else:
+                            _, synced = _sudo_capture(
+                                ["timedatectl", "show", "-p", "NTPSynchronized",
+                                 "--value"])
+                            if synced.strip() == "yes":
+                                self._log(self._s3_log, t("s3_clock_sync_ok"), C_SUCCESS)
+                            else:
+                                # Enabled but not converged yet — normal right
+                                # after boot, worth surfacing but not an error.
+                                self._log(self._s3_log, t("s3_clock_sync_pending"),
+                                          "#aaaaaa")
+
+                        # The container gets its timezone from .env; without it
+                        # the backend logs and stamps in UTC while the
+                        # restaurant works in local time.
+                        _, tz = _sudo_capture(
+                            ["timedatectl", "show", "-p", "Timezone", "--value"])
+                        tz = tz.strip()
+                        if tz and tz != _read_env_keys(["TZ"]).get("TZ"):
+                            _patch_env_keys({"TZ": tz})
+                            self._log(self._s3_log, t("s3_clock_tz", tz=tz), C_SUCCESS)
+                    except (OSError, subprocess.SubprocessError) as exc:
+                        self._log(self._s3_log,
+                                  t("s3_clock_sync_fail", exc=str(exc)), C_DANGER)
+
+                # ── Step 0: Clock preflight ───────────────────────────────
+                # Before the containers start: the backend anchors its licence
+                # rollback check on the clock it sees at boot.
+                _ensure_clock_sync()
+
                 # ── Step 1: Pull latest images ────────────────────────────
                 self._log(self._s3_log, "")
                 self._log(self._s3_log,
