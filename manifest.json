@@ -1,21 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-07-30T08:02:33Z",
+  "updated_at": "2026-07-30T08:03:13Z",
   "services": {
     "backend": {
-      "version": "v0.5.33",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.33",
-      "digest": "sha256:3121900dae873a0304b62ad9df6f82f5642bb19f65c855097b797ff685b6e4a5",
-      "date": "2026-07-29",
+      "version": "v0.5.35",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.35",
+      "digest": "sha256:dc72ce0d6b425aa1b5f3ddea30d06e80cc7e96b055eff7c19fd6274992798fa1",
+      "date": "2026-07-30",
       "changes": [
         {
-          "type": "perf",
-          "text": "stop the 401 refresh storm and the repeated work behind it"
-        },
-        {
-          "type": "fix",
-          "text": "apply a timezone change to the running process"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
