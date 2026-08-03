@@ -1,17 +1,25 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-02T17:02:24Z",
+  "updated_at": "2026-08-03T16:26:21Z",
   "services": {
     "backend": {
-      "version": "v0.5.37",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.37",
-      "digest": "sha256:3214fe645992e582e81f9288bd7f3eeebe8af2f87f82cf9a5c0b9d86ba9cfa25",
-      "date": "2026-08-02",
+      "version": "v0.5.38",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.38",
+      "digest": "sha256:a7a0effa9bcc6ebb46afcbea59e07a9c58b4801355ab478570c3dd8a9747fcb9",
+      "date": "2026-08-03",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "perf",
+          "text": "page the list, and stop deriving the tax breakdown per report"
+        },
+        {
+          "type": "fix",
+          "text": "one bucket per route, and wait out a throttled call"
+        },
+        {
+          "type": "perf",
+          "text": "page the session list and narrow the integrity scan"
         }
       ]
     },
