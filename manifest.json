@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-03T16:26:21Z",
+  "updated_at": "2026-08-03T16:27:09Z",
   "services": {
     "backend": {
       "version": "v0.5.38",
@@ -24,14 +24,26 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.36",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.36",
-      "digest": "sha256:7fb8124e9734091313e61fd48527fbad50bf26a0f26ef25a6c8779c11c61e4ee",
-      "date": "2026-08-02",
+      "version": "v0.5.37",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.37",
+      "digest": "sha256:fe30e4d5f8fad505ae991055238f5be5b44e1f57c9da644f5e5e67955d97c5bd",
+      "date": "2026-08-03",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "perf",
+          "text": "page the heavy report tables and memoize the recipe cards"
+        },
+        {
+          "type": "perf",
+          "text": "page the list, and stop deriving the tax breakdown per report"
+        },
+        {
+          "type": "perf",
+          "text": "build long card lists as they come into view"
+        },
+        {
+          "type": "fix",
+          "text": "one bucket per route, and wait out a throttled call"
         }
       ]
     },
