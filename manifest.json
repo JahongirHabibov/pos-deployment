@@ -1,25 +1,25 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-03T16:27:09Z",
+  "updated_at": "2026-08-03T20:49:55Z",
   "services": {
     "backend": {
-      "version": "v0.5.38",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.38",
-      "digest": "sha256:a7a0effa9bcc6ebb46afcbea59e07a9c58b4801355ab478570c3dd8a9747fcb9",
+      "version": "v0.5.40",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.40",
+      "digest": "sha256:be86b72102e7d0cbffa0d56fcd8f32b856c73ccd85581cb61c59defd2e298119",
       "date": "2026-08-03",
       "changes": [
         {
-          "type": "perf",
-          "text": "page the list, and stop deriving the tax breakdown per report"
+          "type": "feature",
+          "text": "decide per ingredient whether a cancellation returns it or throws it away"
         },
         {
-          "type": "fix",
-          "text": "one bucket per route, and wait out a throttled call"
+          "type": "feature",
+          "text": "prefill the exact cash amount in the payment dialog"
         },
         {
           "type": "perf",
-          "text": "page the session list and narrow the integrity scan"
+          "text": "compress responses so the waiter devices stop pulling raw JSON"
         }
       ]
     },
