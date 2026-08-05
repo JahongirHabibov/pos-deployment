@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-03T20:50:09Z",
+  "updated_at": "2026-08-05T15:30:06Z",
   "services": {
     "backend": {
       "version": "v0.5.40",
@@ -24,34 +24,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.40",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.40",
-      "digest": "sha256:4484bfad63d69db0c519107087cab5b482f4040c17052a60e4156af850c1ae9a",
-      "date": "2026-08-03",
+      "version": "v0.5.41",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.41",
+      "digest": "sha256:cce01ac052c35eab51b83307cfa5a82ab3a8e0ce6508b7445d3dbcbd55903593",
+      "date": "2026-08-05",
       "changes": [
         {
           "type": "feature",
-          "text": "decide per ingredient whether a cancellation returns it or throws it away"
-        },
-        {
-          "type": "feature",
-          "text": "prefill the exact cash amount in the payment dialog"
-        },
-        {
-          "type": "feature",
-          "text": "let the low-stock alert clear its own filter"
-        },
-        {
-          "type": "perf",
-          "text": "reuse an unchanged poll result, and the number formatter"
-        },
-        {
-          "type": "perf",
-          "text": "build tabs on first visit, and stop polling hidden pages"
-        },
-        {
-          "type": "feature",
-          "text": "type a quantity instead of tapping a product five times"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
