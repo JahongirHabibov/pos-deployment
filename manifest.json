@@ -1,25 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-05T15:30:06Z",
+  "updated_at": "2026-08-05T15:30:27Z",
   "services": {
     "backend": {
-      "version": "v0.5.40",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.40",
-      "digest": "sha256:be86b72102e7d0cbffa0d56fcd8f32b856c73ccd85581cb61c59defd2e298119",
-      "date": "2026-08-03",
+      "version": "v0.5.41",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.41",
+      "digest": "sha256:a7ad3ad7e2676477436d6766c105480a22a1ee5719b360a4638949ddf17b1bee",
+      "date": "2026-08-05",
       "changes": [
         {
           "type": "feature",
-          "text": "decide per ingredient whether a cancellation returns it or throws it away"
-        },
-        {
-          "type": "feature",
-          "text": "prefill the exact cash amount in the payment dialog"
-        },
-        {
-          "type": "perf",
-          "text": "compress responses so the waiter devices stop pulling raw JSON"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
