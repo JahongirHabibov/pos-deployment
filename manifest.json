@@ -1,17 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-05T15:45:54Z",
+  "updated_at": "2026-08-10T14:53:45Z",
   "services": {
     "backend": {
-      "version": "v0.5.42",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.42",
-      "digest": "sha256:f66f2d413bc0486b309044f4f96bcb423a340fd8b9ea0399c78df452ce7de220",
-      "date": "2026-08-05",
+      "version": "v0.5.43",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.43",
+      "digest": "sha256:70400df045a9acffbcdfbda38497e38b1ac19d41cc99d3eb3fc16c13001da9cb",
+      "date": "2026-08-10",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "fix",
+          "text": "retiring a printer must not 500"
         }
       ]
     },
