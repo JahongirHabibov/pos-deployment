@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-11T12:47:06Z",
+  "updated_at": "2026-08-11T13:22:36Z",
   "services": {
     "backend": {
       "version": "v0.5.46",
@@ -52,18 +52,14 @@
       ]
     },
     "updater": {
-      "version": "v0.5.20",
-      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.20",
-      "digest": "sha256:e6403107ba081e513f54b9d4c4999f0902b1790356fb88be448e3dd522b7ca73",
+      "version": "v0.5.21",
+      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.21",
+      "digest": "sha256:5fd4dd2866fa8578ca3e501b79d6121fa1ff6f5aed23c7205a6d086c18db45e7",
       "date": "2026-08-11",
       "changes": [
         {
-          "type": "fix",
-          "text": "the release gate must be allowed to read the registry"
-        },
-        {
-          "type": "fix",
-          "text": "keep the manifest at schema 3 — a bump locks the fleet out"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     }
