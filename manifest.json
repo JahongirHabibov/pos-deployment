@@ -1,7 +1,7 @@
 {
-  "schema": 3,
+  "schema": 4,
   "channel": "stable",
-  "updated_at": "2026-08-11T08:43:37Z",
+  "updated_at": "2026-08-11T10:02:07Z",
   "services": {
     "backend": {
       "version": "v0.5.44",
@@ -32,26 +32,14 @@
       ]
     },
     "image-service": {
-      "version": "v0.5.10",
-      "image": "ghcr.io/jahongirhabibov/pos-image-service:0.5.10",
-      "digest": "sha256:aac4050228df570af2867abc3c59e703cb30164938d2161c2b476da1d7a0f04a",
-      "date": "2026-07-10",
+      "version": "v0.5.11",
+      "image": "ghcr.io/jahongirhabibov/pos-image-service:0.5.11",
+      "digest": "sha256:944eb23f9ae6dfbaed58729d203e107948a8b2d3de39ef7ac3b3cdfb951cd222",
+      "date": "2026-08-11",
       "changes": [
         {
           "type": "feature",
-          "text": "add /internal/restart endpoint for backup sidecar coordination"
-        },
-        {
-          "type": "feature",
-          "text": "optimize updater and image service dockerfiles and dependencies"
-        },
-        {
-          "type": "feature",
-          "text": "StaffMobileView, StaffTabletView, useCartManager, useProductCatalog"
-        },
-        {
-          "type": "feature",
-          "text": "production Docker setup with CI/CD pipeline"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
