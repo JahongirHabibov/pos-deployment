@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-11T10:56:07Z",
+  "updated_at": "2026-08-11T10:56:33Z",
   "services": {
     "backend": {
       "version": "v0.5.46",
@@ -16,18 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.44",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.44",
-      "digest": "sha256:e58aed8e230c28c266952a2ef2160e68a8d9c57617490fe4d9157547d8f08c55",
+      "version": "v0.5.46",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.46",
+      "digest": "sha256:a04378d50919205bc80971d2eb8c6bf24d19a9a877ac124a67ac121a227e6c77",
       "date": "2026-08-11",
       "changes": [
         {
           "type": "feature",
-          "text": "hand the accountant one file for the whole period"
-        },
-        {
-          "type": "feature",
-          "text": "explain every money figure where it is shown"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
