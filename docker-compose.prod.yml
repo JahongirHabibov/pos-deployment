@@ -252,9 +252,18 @@ services:
       - WEBSITE_UPDATE_METADATA_URL=${WEBSITE_UPDATE_METADATA_URL:-https://raw.githubusercontent.com/JahongirHabibov/pos-deployment/main/manifest.json}
       - ONPREM_UPDATE_METADATA_URL=${ONPREM_UPDATE_METADATA_URL:-}
       - UPDATE_CHANNEL=${UPDATE_CHANNEL:-stable}
-      # Pull automatically in the background; applying always needs an admin click.
-      - UPDATE_AUTO_DOWNLOAD=${UPDATE_AUTO_DOWNLOAD:-true}
+      # Downloading and applying are both deliberate admin actions. The updater
+      # only checks on a schedule; it never pulls on its own. (UPDATE_AUTO_DOWNLOAD
+      # is gone — an unannounced background pull during dinner service is not a
+      # decision the machine gets to make.)
       - UPDATE_CHECK_INTERVAL_SECONDS=${UPDATE_CHECK_INTERVAL_SECONDS:-21600}
+      # Cosign verification of manifest.json and every image before it can be
+      # applied. Leave this on: see docs/deployment/cosign-key-setup.md.
+      - UPDATE_REQUIRE_SIGNATURE=${UPDATE_REQUIRE_SIGNATURE:-true}
+      - COSIGN_PUBLIC_KEY_FILE=${COSIGN_PUBLIC_KEY_FILE:-/app/keys/cosign.pub}
+      # Pull via the Docker Engine API so the UI can show real byte progress.
+      # Off falls back to `docker pull`, which reports layers only.
+      - UPDATE_ENGINE_PULL=${UPDATE_ENGINE_PULL:-true}
       # Pre-apply database snapshot via the backup sidecar (blocking, aborts on failure).
       - BACKUP_BASE_URL=${BACKUP_BASE_URL:-http://pos-backup:8300}
       - BACKUP_SNAPSHOT_TIMEOUT=${BACKUP_SNAPSHOT_TIMEOUT:-600}
