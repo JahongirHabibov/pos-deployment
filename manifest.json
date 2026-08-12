@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-12T12:03:57Z",
+  "updated_at": "2026-08-12T12:04:51Z",
   "services": {
     "backend": {
       "version": "v0.5.47",
@@ -24,14 +24,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.47",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.47",
-      "digest": "sha256:b307610fdcd4f4cec642dce03bb3d8ccb32ae7662d6d336a64ba7f42bfb0bf3d",
+      "version": "v0.5.48",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.48",
+      "digest": "sha256:a9422eb0826e670695e4f5c067dbdb3d557d72174675b051234fb0e752768eaa",
       "date": "2026-08-12",
       "changes": [
         {
           "type": "fix",
-          "text": "hand the period to every block fetcher"
+          "text": "dismiss the update badge per offer, not per highest version"
         }
       ]
     },
