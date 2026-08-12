@@ -285,6 +285,26 @@ Verändernde Verben: `act restart-container`, `act restart-network`, `act renew-
 `act sync-time`, `act flush-dns`, `act prune-dangling-images`, `act restart-power-agent`,
 `act reboot`, `act poweroff`, `act write-config`.
 
+#### Bindende Validierungsregeln
+
+Weil das Repositorium öffentlich ist, kennt ein Angreifer diese Muster im Wortlaut. Die
+folgenden Regeln sind deshalb nicht Stilfragen, sondern Teil der Sicherheitsgrenze:
+
+* **Immer `re.fullmatch` mit `\A…\Z`, nie `re.match` mit `$`.** In Python matcht `$` auch
+  unmittelbar vor einem abschließenden Zeilenumbruch. `pos-backend\n` käme durch
+  `^pos-[a-z0-9-]{1,32}$` — genau die Art Lücke, nach der in öffentlichem Code zuerst
+  gesucht wird.
+* **Argument-Injection ist die eigentliche Gefahr, nicht Shell-Injection.** Es wird nirgends
+  eine Shell benutzt, aber ein Bezeichner mit führendem Bindestrich würde vom aufgerufenen
+  Programm als Option gelesen. Jedes Kommando trennt daher Optionen von Werten mit `--`,
+  zusätzlich zur Regex, die den Bindestrich am Anfang ohnehin ausschließt.
+* **Prüfen, dann verwenden — nie umgekehrt.** Der validierte Wert wird weitergereicht, nicht
+  die Eingabe. Kein Bezeichner wird nach der Prüfung noch zusammengesetzt, normalisiert oder
+  ergänzt.
+* **Unbekanntes Verb, falsche Argumentzahl oder fehlgeschlagene Validierung** führen zu
+  Abbruch mit Rückgabewert 2 und einem Protokolleintrag — nie zu einem Ausführungsversuch
+  mit Ersatzwerten.
+
 ### 5.3 Warum ein sudoers-Drop-in nötig ist
 
 `installer.py` führt Docker durchgehend über `sudo -S` mit gepipetem Passwort aus (u. a.
@@ -352,6 +372,32 @@ Zugangsdaten werden **nicht** in `expected-config.json` hinterlegt.
 Nur auf Knopfdruck. Begrenzt auf das `/24` der primären Schnittstelle. TCP-Verbindungstest
 auf 9100, 631 und 80 mit 300 ms Timeout, parallelisiert mit fester Obergrenze. Keine
 Nutzdaten, keine Schreibzugriffe, kein automatischer Wiederholungslauf.
+
+Zusätzlich ratenbegrenzt: höchstens ein Scan gleichzeitig und höchstens einer alle
+30 Sekunden. Ohne diese Bremse wäre der unauthentifizierte Endpunkt ein Hebel, um Netz und
+Drucker durch wiederholte Scans lahmzulegen.
+
+### 5.8 Lokale Zugriffskontrolle über die Peer-UID
+
+Eine Bindung an `127.0.0.1` schützt vor dem Netz, **nicht vor anderen Benutzern desselben
+Rechners**. Ein TCP-Socket auf der Loopback-Adresse ist für jedes lokale Konto erreichbar.
+Ohne Gegenmaßnahme käme ein Nebenkonto oder ein kompromittierter lokaler Dienst über die
+lesenden Endpunkte an Container-Logs und den vollständigen Support-Report — beides kann
+Geschäftsdaten enthalten.
+
+Deshalb prüft der Dienst bei **jeder** Anfrage die Benutzerkennung der Gegenstelle:
+
+1. Aus dem akzeptierten Socket werden lokale und entfernte Adresse samt Port gelesen.
+2. In `/proc/net/tcp` und `/proc/net/tcp6` wird die passende Zeile gesucht und daraus die
+   UID des besitzenden Prozesses entnommen.
+3. Zugelassen sind ausschließlich der Dienstbenutzer und `root`. Jede andere UID erhält
+   `403` und einen Protokolleintrag.
+4. Lässt sich die UID nicht bestimmen — etwa weil die Verbindung bereits geschlossen ist —
+   wird abgewiesen. Im Zweifel Ablehnung, nie Zulassung.
+
+Reine Standardbibliothek, unter Linux verlässlich, rund dreißig Zeilen. Die Prüfung liegt
+vor der Weiterleitung, damit sie kein Endpunkt versehentlich umgehen kann, und sie ersetzt
+keine der übrigen Maßnahmen, sondern ergänzt sie.
 
 ---
 
@@ -638,6 +684,10 @@ Beides ist testpflichtig.
 | POST | `/api/actions/{id}` | je Aktion | Reparatur ausführen |
 | GET | `/api/report` | — | Support-Report |
 
+**Jede** Anfrage — auch die in der Tabelle mit „—" markierten — durchläuft zuvor die
+Peer-UID-Prüfung aus Abschnitt 5.8; „—" bedeutet „ohne zusätzliche Anmeldung", nicht
+„ohne Zugriffskontrolle". `POST /api/scan` ist zusätzlich ratenbegrenzt (Abschnitt 5.7).
+
 Alle POST/PUT/DELETE verlangen den Header `X-Kassio-Diag: 1` und werden gegen die
 Origin-Allowlist geprüft. Antworten sind stets JSON mit `{ok, data|error}`; ein Fehler
 enthält immer einen Sprachschlüssel, nie einen nackten Text.
@@ -677,7 +727,14 @@ und ohne sudo**; die Kommandoausführung wird injiziert.
 Verbindlich abgedeckt:
 
 * **Argumentvalidierung des Helpers** — jedes Verb, jedes Zurückweisungsmuster, inklusive
-  Versuchen mit Sonderzeichen, Pfadangaben und überlangen Namen
+  Versuchen mit Sonderzeichen, Pfadangaben und überlangen Namen. Verbindlich mit eigenen
+  Fällen abgedeckt: **abschließender Zeilenumbruch** (`pos-backend\n` muss abgelehnt
+  werden), **führender Bindestrich** und die Zusicherung, dass jedes zusammengebaute
+  Kommando ein `--` vor den Werten enthält
+* **Peer-UID-Prüfung** — Anfrage einer fremden UID wird mit `403` abgewiesen; ist die UID
+  nicht bestimmbar, wird ebenfalls abgewiesen
+* **Ratenbegrenzung des Scans** — zwei schnell aufeinanderfolgende Scans, der zweite wird
+  abgelehnt
 * **Schwärzung** — bekannte Geheimnisse müssen beweisbar aus dem Report verschwinden;
   dieser Test ist die Schutzlinie für ein öffentliches Repositorium
 * **Isolation der Prüfungen** — eine absichtlich abstürzende Prüfung darf das
