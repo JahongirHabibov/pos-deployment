@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-11T13:22:36Z",
+  "updated_at": "2026-08-12T11:02:17Z",
   "services": {
     "backend": {
       "version": "v0.5.46",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.46",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.46",
-      "digest": "sha256:a04378d50919205bc80971d2eb8c6bf24d19a9a877ac124a67ac121a227e6c77",
-      "date": "2026-08-11",
+      "version": "v0.5.47",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.47",
+      "digest": "sha256:b307610fdcd4f4cec642dce03bb3d8ccb32ae7662d6d336a64ba7f42bfb0bf3d",
+      "date": "2026-08-12",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "fix",
+          "text": "hand the period to every block fetcher"
         }
       ]
     },
