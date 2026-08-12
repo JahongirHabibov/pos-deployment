@@ -1,0 +1,60 @@
+[Unit]
+Description=KASSIO Diagnostics (local diagnostics and repair interface)
+Documentation=file:/opt/kassio-diagnostics/README.md
+After=network.target
+# Deliberately no Requires= on docker: diagnosing a broken Docker is one of
+# this service's jobs, so it must start whether or not Docker is healthy.
+
+[Service]
+Type=simple
+User=__ADMIN_USER__
+WorkingDirectory=/opt/kassio-diagnostics
+Environment=PYTHONPATH=/opt/kassio-diagnostics
+Environment=PYTHONUNBUFFERED=1
+Environment=KASSIO_DIAG_HOST=127.0.0.1
+Environment=KASSIO_DIAG_PORT=9120
+ExecStart=/usr/bin/python3 -m kassio_diagnostics
+Restart=always
+RestartSec=2
+
+# --- hardening -------------------------------------------------------------
+# NoNewPrivileges is deliberately NOT set: it blocks setuid binaries and would
+# therefore disable sudo, on which this service's entire privilege model rests.
+# The security boundary is the fixed verb table in the root-owned helper, which
+# accepts no caller-supplied command or path.
+PrivateTmp=yes
+# "full" rather than "strict": strict mounts /etc read-only for the whole unit,
+# including the root child started through sudo, which would make writing
+# expected-config.json impossible.
+ProtectSystem=full
+# read-only rather than yes: the deployment directory with .env may live under
+# the admin user's home and has to stay readable.
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# AF_NETLINK is required: "ip" talks to the kernel over netlink, and without it
+# every network check returns empty.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+# No core dumps: a crash must not be able to spill the briefly held sudo
+# password into a file on disk.
+LimitCORE=0
+# Restricts only listening sockets, unlike IPAddressDeny, which would also cut
+# off the subnet scan, the printer probes and the POS API calls.
+SocketBindAllow=ipv4:tcp:9120
+SocketBindDeny=any
+
+# --- resource limits -------------------------------------------------------
+# The POS always takes priority; a diagnostics tool must never crowd it out.
+MemoryMax=512M
+CPUQuota=25%
+TasksMax=64
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

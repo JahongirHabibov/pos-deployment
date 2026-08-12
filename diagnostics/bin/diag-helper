@@ -1,0 +1,814 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026 Jahongir Habibov. All Rights Reserved.
+# Proprietary and Confidential. Unauthorized use, copying, or distribution is strictly prohibited.
+
+"""
+KASSIO Diagnostics — privileged helper.
+
+This is the ONLY path from the unprivileged diagnostics service to root. It is
+owned by root, not writable by the service user, and it never accepts a path, a
+command or an option from its caller — only a verb from a hardcoded table plus
+strictly validated identifiers.
+
+The repository is public, so these validation rules are known to an attacker
+verbatim. Two rules therefore carry real weight and are covered by tests:
+
+  * Every pattern is applied with re.fullmatch and \\A..\\Z anchors. In Python,
+    ``$`` also matches immediately before a trailing newline, so ``^pos-[a-z]+$``
+    would happily accept ``pos-backend\\n``.
+  * The danger here is argument injection, not shell injection: no shell is ever
+    used, but an identifier starting with a dash would be read as an option by
+    the invoked program. Every command that carries a caller-supplied value puts
+    ``--`` in front of it, on top of the pattern that already rules the dash out.
+
+Exit codes:
+    0  success                    stdout: {"ok": true, "data": ...}
+    2  invalid usage / rejected argument
+    3  needs root (caller should retry via sudo)
+    4  required tool not installed
+    5  command failed             stdout: {"ok": false, "error": ..., "detail": ...}
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HELPER_VERSION = "1.0.0"
+
+CONFIG_DIR = "/etc/kassio-diagnostics"
+CONFIG_PATH = os.path.join(CONFIG_DIR, "expected-config.json")
+MAX_CONFIG_BYTES = 256 * 1024
+
+EXIT_OK, EXIT_USAGE, EXIT_NEEDS_ROOT, EXIT_NO_TOOL, EXIT_FAILED = 0, 2, 3, 4, 5
+
+# --------------------------------------------------------------------------
+# Validation
+# --------------------------------------------------------------------------
+
+RE_CONTAINER = re.compile(r"\Apos-[a-z0-9][a-z0-9-]{0,31}\Z")
+# The first character is restricted to alphanumerics in every identifier that
+# reaches a command line: a leading dash would be read as an option by the
+# invoked program, which is the argument-injection case this file guards.
+RE_UNIT = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9@._-]{0,63}\.(service|timer|socket)\Z")
+RE_BLOCKDEV = re.compile(r"\A/dev/(sd[a-z]{1,2}|nvme\d{1,2}n\d{1,2}|mmcblk\d{1,2})\Z")
+RE_IFACE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,14}\Z")
+ALLOWED_LOG_LINES = (50, 200, 1000)
+
+
+class Rejected(Exception):
+    """An argument failed validation. Never fall back to a default value."""
+
+
+def _check(pattern: re.Pattern, value: str, what: str) -> str:
+    # fullmatch, never match+$ — see module docstring.
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        raise Rejected(f"invalid {what}")
+    return value
+
+
+def _container(value: str) -> str:
+    return _check(RE_CONTAINER, value, "container name")
+
+
+def _unit(value: str) -> str:
+    return _check(RE_UNIT, value, "unit name")
+
+
+def _blockdev(value: str) -> str:
+    return _check(RE_BLOCKDEV, value, "block device")
+
+
+def _iface(value: str) -> str:
+    return _check(RE_IFACE, value, "interface")
+
+
+RE_DIGITS = re.compile(r"\A[0-9]{1,4}\Z")
+
+
+def _log_lines(value: str) -> int:
+    # int() tolerates surrounding whitespace and a leading sign, so the string
+    # is checked before it is converted rather than after.
+    if not isinstance(value, str) or not RE_DIGITS.fullmatch(value):
+        raise Rejected("invalid line count")
+    lines = int(value)
+    if lines not in ALLOWED_LOG_LINES:
+        raise Rejected("invalid line count")
+    return lines
+
+
+# --------------------------------------------------------------------------
+# Command execution
+# --------------------------------------------------------------------------
+
+
+def run(argv: list, timeout: int = 15, check: bool = False) -> dict:
+    """Run a command as an argument list. Never uses a shell."""
+    binary = shutil.which(argv[0])
+    if binary is None:
+        return {"ok": False, "missing": argv[0], "rc": None, "out": "", "err": ""}
+    try:
+        proc = subprocess.run(
+            [binary] + [str(a) for a in argv[1:]],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "timeout": True, "rc": None, "out": "", "err": "timeout"}
+    except OSError as exc:
+        return {"ok": False, "rc": None, "out": "", "err": str(exc)}
+    ok = proc.returncode == 0
+    if check and not ok:
+        ok = False
+    return {"ok": ok, "rc": proc.returncode, "out": proc.stdout, "err": proc.stderr}
+
+
+def read_text(path: str, limit: int = 1 << 20) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            return handle.read(limit)
+    except OSError:
+        return ""
+
+
+def read_first_line(path: str) -> str:
+    return read_text(path, 4096).split("\n", 1)[0].strip()
+
+
+# --------------------------------------------------------------------------
+# read verbs
+# --------------------------------------------------------------------------
+
+
+def _os_release() -> dict:
+    values = {}
+    for line in read_text("/etc/os-release", 8192).splitlines():
+        if "=" in line and not line.startswith("#"):
+            key, _, value = line.partition("=")
+            values[key.strip()] = value.strip().strip('"')
+    return values
+
+
+def _mounts() -> list:
+    interesting = []
+    for line in read_text("/proc/mounts", 1 << 16).splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        device, mountpoint, fstype = parts[0], parts[1], parts[2]
+        if fstype in ("proc", "sysfs", "devtmpfs", "devpts", "cgroup", "cgroup2",
+                      "tmpfs", "squashfs", "overlay", "autofs", "fuse.gvfsd-fuse",
+                      "mqueue", "hugetlbfs", "debugfs", "tracefs", "pstore",
+                      "bpf", "configfs", "fusectl", "securityfs", "ramfs", "nsfs"):
+            continue
+        if not device.startswith("/dev/"):
+            continue
+        try:
+            usage = shutil.disk_usage(mountpoint)
+        except OSError:
+            continue
+        interesting.append({
+            "device": device,
+            "mountpoint": mountpoint,
+            "fstype": fstype,
+            "total": usage.total,
+            "used": usage.used,
+            "free": usage.free,
+            "percent": round(usage.used / usage.total * 100, 1) if usage.total else None,
+        })
+    return interesting
+
+
+def _temperatures() -> list:
+    result = []
+    base = "/sys/class/thermal"
+    try:
+        zones = sorted(os.listdir(base))
+    except OSError:
+        return result
+    for zone in zones:
+        if not zone.startswith("thermal_zone"):
+            continue
+        raw = read_first_line(os.path.join(base, zone, "temp"))
+        zone_type = read_first_line(os.path.join(base, zone, "type")) or zone
+        try:
+            result.append({"zone": zone_type, "celsius": round(int(raw) / 1000.0, 1)})
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _boot_mode() -> dict:
+    efi = os.path.isdir("/sys/firmware/efi")
+    secure_boot = None
+    efivars = "/sys/firmware/efi/efivars"
+    if efi and os.path.isdir(efivars):
+        try:
+            for name in os.listdir(efivars):
+                if name.startswith("SecureBoot-"):
+                    with open(os.path.join(efivars, name), "rb") as handle:
+                        blob = handle.read(8)
+                    if len(blob) >= 5:
+                        secure_boot = bool(blob[4])
+                    break
+        except OSError:
+            secure_boot = None
+    return {"mode": "uefi" if efi else "legacy", "secure_boot": secure_boot}
+
+
+def _machine_id() -> dict:
+    raw = read_first_line("/etc/machine-id")
+    if not raw:
+        return {"present": False, "hash": None}
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return {"present": True, "hash": "sha256:" + digest}
+
+
+def _meminfo() -> dict:
+    values = {}
+    for line in read_text("/proc/meminfo", 1 << 16).splitlines():
+        key, _, rest = line.partition(":")
+        number = rest.strip().split(" ")[0]
+        try:
+            values[key.strip()] = int(number) * 1024
+        except ValueError:
+            continue
+    total = values.get("MemTotal")
+    available = values.get("MemAvailable")
+    return {
+        "total": total,
+        "available": available,
+        "used": (total - available) if (total and available) else None,
+        "percent": round((total - available) / total * 100, 1) if (total and available) else None,
+        "swap_total": values.get("SwapTotal"),
+        "swap_free": values.get("SwapFree"),
+    }
+
+
+def verb_read_system(args: list) -> dict:
+    if args:
+        raise Rejected("read system takes no arguments")
+    release = _os_release()
+    loadavg = read_first_line("/proc/loadavg").split()
+    uptime_raw = read_first_line("/proc/uptime").split()
+    try:
+        uptime = float(uptime_raw[0]) if uptime_raw else None
+    except ValueError:
+        uptime = None
+    return {
+        "os": {
+            "name": release.get("PRETTY_NAME") or release.get("NAME") or "unknown",
+            "id": release.get("ID", "unknown"),
+            "version_id": release.get("VERSION_ID", ""),
+        },
+        "kernel": os.uname().release,
+        "hostname": os.uname().nodename,
+        "architecture": os.uname().machine,
+        "uptime_seconds": uptime,
+        "loadavg": [float(v) for v in loadavg[:3]] if len(loadavg) >= 3 else [],
+        "cpu_count": os.cpu_count(),
+        "memory": _meminfo(),
+        "disks": _mounts(),
+        "temperatures": _temperatures(),
+        "boot": _boot_mode(),
+        "machine_id": _machine_id(),
+    }
+
+
+def verb_read_timesync(args: list) -> dict:
+    if args:
+        raise Rejected("read timesync takes no arguments")
+    status = run(["timedatectl", "show"], timeout=10)
+    timesync = run(["timedatectl", "show-timesync"], timeout=10)
+    values = {}
+    for blob in (status.get("out", ""), timesync.get("out", "")):
+        for line in blob.splitlines():
+            key, _, value = line.partition("=")
+            if key:
+                values[key.strip()] = value.strip()
+    return {
+        "available": status.get("missing") is None,
+        "values": values,
+        "chrony": shutil.which("chronyc") is not None,
+    }
+
+
+def verb_read_network(args: list) -> dict:
+    if args:
+        raise Rejected("read network takes no arguments")
+
+    def ip_json(subcommand: list) -> object:
+        result = run(["ip", "-j"] + subcommand, timeout=10)
+        if not result["ok"]:
+            return None
+        try:
+            return json.loads(result["out"] or "[]")
+        except json.JSONDecodeError:
+            return None
+
+    resolv = read_text("/etc/resolv.conf", 16384)
+    nameservers = [
+        line.split()[1]
+        for line in resolv.splitlines()
+        if line.startswith("nameserver") and len(line.split()) > 1
+    ]
+    return {
+        "addresses": ip_json(["addr", "show"]),
+        "routes": ip_json(["route", "show"]),
+        "neighbours": ip_json(["neigh", "show"]),
+        "nameservers": nameservers,
+        "tool_available": shutil.which("ip") is not None,
+    }
+
+
+WATCHED_UNITS = (
+    "docker.service",
+    "containerd.service",
+    "kassio-power-agent.service",
+    "kassio-diagnostics.service",
+    "cups.service",
+    "systemd-timesyncd.service",
+    "chronyd.service",
+    "chrony.service",
+    "NetworkManager.service",
+    "systemd-networkd.service",
+    "systemd-resolved.service",
+)
+
+
+def verb_read_services(args: list) -> dict:
+    if args:
+        raise Rejected("read services takes no arguments")
+    units = {}
+    for unit in WATCHED_UNITS:
+        active = run(["systemctl", "is-active", "--", unit], timeout=8)
+        enabled = run(["systemctl", "is-enabled", "--", unit], timeout=8)
+        state = (active.get("out") or "").strip()
+        units[unit] = {
+            "active": state,
+            "enabled": (enabled.get("out") or "").strip(),
+            "installed": state != "" and state != "inactive" or enabled.get("rc") == 0,
+        }
+    return {"units": units}
+
+
+def verb_read_usb(args: list) -> dict:
+    if args:
+        raise Rejected("read usb takes no arguments")
+    devices = []
+    listing = run(["lsusb"], timeout=10)
+    if listing["ok"]:
+        for line in listing["out"].splitlines():
+            if line.strip():
+                devices.append({"description": line.strip()})
+    else:
+        base = "/sys/bus/usb/devices"
+        try:
+            entries = sorted(os.listdir(base))
+        except OSError:
+            entries = []
+        for entry in entries:
+            path = os.path.join(base, entry)
+            vendor = read_first_line(os.path.join(path, "idVendor"))
+            product = read_first_line(os.path.join(path, "idProduct"))
+            if not vendor or not product:
+                continue
+            name = read_first_line(os.path.join(path, "product"))
+            manufacturer = read_first_line(os.path.join(path, "manufacturer"))
+            devices.append({
+                "description": f"ID {vendor}:{product} {manufacturer} {name}".strip()
+            })
+    printer_nodes = []
+    for pattern_dir, prefix in (("/dev/usb", "lp"), ("/dev", "lp")):
+        try:
+            for name in sorted(os.listdir(pattern_dir)):
+                if name.startswith(prefix):
+                    printer_nodes.append(os.path.join(pattern_dir, name))
+        except OSError:
+            continue
+    return {"devices": devices, "printer_nodes": sorted(set(printer_nodes))}
+
+
+def verb_read_boots(args: list) -> dict:
+    """Recent boots, used to spot power cuts and unclean shutdowns."""
+    if args:
+        raise Rejected("read boots takes no arguments")
+    result = run(["journalctl", "--list-boots", "--no-pager", "-n", "11"], timeout=20)
+    if result.get("missing"):
+        raise NoTool("journalctl")
+    if not result["ok"]:
+        combined = (result.get("err") or "").lower()
+        if "permission" in combined and os.geteuid() != 0:
+            raise NeedsRoot()
+        return {"available": False, "boots": []}
+    boots = []
+    for line in (result.get("out") or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and (parts[0].lstrip("-").isdigit()):
+            boots.append({"index": parts[0], "id": parts[1], "raw": line.strip()})
+    return {"available": True, "boots": boots,
+            "persistent_journal": os.path.isdir("/var/log/journal")}
+
+
+def verb_read_smart(args: list) -> dict:
+    if len(args) != 1:
+        raise Rejected("read smart takes exactly one device")
+    device = _blockdev(args[0])
+    if os.geteuid() != 0:
+        raise NeedsRoot()
+    # smartctl parses options with getopt, so -- reliably ends option parsing.
+    result = run(["smartctl", "-H", "-j", "--", device], timeout=20)
+    if result.get("missing"):
+        raise NoTool("smartctl")
+    payload = None
+    try:
+        payload = json.loads(result["out"] or "{}")
+    except json.JSONDecodeError:
+        payload = None
+    return {
+        "device": device,
+        "raw_ok": result["ok"],
+        "smart": payload,
+        "stderr": (result.get("err") or "")[:2000],
+    }
+
+
+def verb_read_journal(args: list) -> dict:
+    if len(args) != 1:
+        raise Rejected("read journal takes exactly one unit")
+    unit = _unit(args[0])
+    if os.geteuid() != 0:
+        raise NeedsRoot()
+    result = run(["journalctl", "-u", "--", unit, "-n", "100", "--no-pager"], timeout=20)
+    if result.get("missing"):
+        raise NoTool("journalctl")
+    return {"unit": unit, "lines": (result.get("out") or "").splitlines()[-100:]}
+
+
+def _docker_or_root(result: dict) -> None:
+    """Docker without permission looks like success of the binary but an error text."""
+    if result.get("missing"):
+        raise NoTool("docker")
+    combined = (result.get("err") or "") + (result.get("out") or "")
+    if not result["ok"] and "permission denied" in combined.lower() and os.geteuid() != 0:
+        raise NeedsRoot()
+
+
+def verb_read_containers(args: list) -> dict:
+    if args:
+        raise Rejected("read containers takes no arguments")
+    result = run(["docker", "ps", "-a", "--no-trunc", "--format", "{{json .}}"], timeout=25)
+    _docker_or_root(result)
+    if not result["ok"]:
+        return {"available": False, "error": (result.get("err") or "").strip()[:500],
+                "containers": []}
+    containers = []
+    for line in (result.get("out") or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        name = entry.get("Names", "")
+        if not name.startswith("pos-"):
+            continue
+        containers.append({
+            "name": name,
+            "image": entry.get("Image", ""),
+            "state": entry.get("State", ""),
+            "status": entry.get("Status", ""),
+            "created": entry.get("CreatedAt", ""),
+            "ports": entry.get("Ports", ""),
+        })
+    return {"available": True, "containers": containers}
+
+
+def verb_read_container_inspect(args: list) -> dict:
+    if len(args) != 1:
+        raise Rejected("read container-inspect takes exactly one container")
+    name = _container(args[0])
+    result = run(["docker", "inspect", "--", name], timeout=20)
+    _docker_or_root(result)
+    if not result["ok"]:
+        return {"name": name, "available": False,
+                "error": (result.get("err") or "").strip()[:500]}
+    try:
+        payload = json.loads(result["out"] or "[]")
+    except json.JSONDecodeError:
+        return {"name": name, "available": False, "error": "unparsable inspect output"}
+    entry = payload[0] if payload else {}
+    state = entry.get("State", {}) or {}
+    health = (state.get("Health") or {}).get("Status")
+    return {
+        "name": name,
+        "available": True,
+        "state": state.get("Status"),
+        "health": health,
+        "restart_count": entry.get("RestartCount"),
+        "started_at": state.get("StartedAt"),
+        "exit_code": state.get("ExitCode"),
+        "image": (entry.get("Config") or {}).get("Image"),
+    }
+
+
+def verb_read_container_logs(args: list) -> dict:
+    if len(args) != 2:
+        raise Rejected("read container-logs takes a container and a line count")
+    name = _container(args[0])
+    lines = _log_lines(args[1])
+    result = run(["docker", "logs", "--tail", str(lines), "--timestamps", "--", name],
+                 timeout=30)
+    _docker_or_root(result)
+    if not result["ok"]:
+        return {"name": name, "available": False,
+                "error": (result.get("err") or "").strip()[:500], "lines": []}
+    merged = (result.get("out") or "") + (result.get("err") or "")
+    return {"name": name, "available": True, "lines": merged.splitlines()[-lines:]}
+
+
+# --------------------------------------------------------------------------
+# act verbs
+# --------------------------------------------------------------------------
+
+
+def verb_act_noop(args: list) -> dict:
+    """Exists so the service can verify a sudo password without side effects."""
+    if args:
+        raise Rejected("act noop takes no arguments")
+    return {"verified": True, "euid": os.geteuid()}
+
+
+def verb_act_restart_container(args: list) -> dict:
+    if len(args) != 1:
+        raise Rejected("act restart-container takes exactly one container")
+    name = _container(args[0])
+    result = run(["docker", "restart", "--", name], timeout=90)
+    _docker_or_root(result)
+    if not result["ok"]:
+        raise Failed("docker restart failed", result.get("err") or result.get("out") or "")
+    return {"restarted": name}
+
+
+def _first_active_unit(candidates) -> str:
+    for unit in candidates:
+        state = run(["systemctl", "is-active", "--", unit], timeout=8)
+        if (state.get("out") or "").strip() == "active":
+            return unit
+    return ""
+
+
+def verb_act_restart_network(args: list) -> dict:
+    if args:
+        raise Rejected("act restart-network takes no arguments")
+    unit = _first_active_unit(["NetworkManager.service", "systemd-networkd.service",
+                               "networking.service"])
+    if not unit:
+        raise Failed("no known network manager is active", "")
+    result = run(["systemctl", "restart", "--", unit], timeout=60)
+    if not result["ok"]:
+        raise Failed("restart failed", result.get("err") or "")
+    return {"restarted": unit}
+
+
+def verb_act_renew_dhcp(args: list) -> dict:
+    if len(args) != 1:
+        raise Rejected("act renew-dhcp takes exactly one interface")
+    iface = _iface(args[0])
+    if shutil.which("nmcli"):
+        down = run(["nmcli", "device", "disconnect", iface], timeout=40)
+        up = run(["nmcli", "device", "connect", iface], timeout=60)
+        if not up["ok"]:
+            raise Failed("nmcli reconnect failed", (up.get("err") or down.get("err") or ""))
+        return {"interface": iface, "method": "nmcli"}
+    if shutil.which("dhclient"):
+        run(["dhclient", "-r", iface], timeout=30)
+        result = run(["dhclient", iface], timeout=60)
+        if not result["ok"]:
+            raise Failed("dhclient failed", result.get("err") or "")
+        return {"interface": iface, "method": "dhclient"}
+    raise NoTool("nmcli")
+
+
+def verb_act_sync_time(args: list) -> dict:
+    if args:
+        raise Rejected("act sync-time takes no arguments")
+    steps = []
+    enable = run(["timedatectl", "set-ntp", "true"], timeout=20)
+    steps.append({"step": "set-ntp", "ok": enable["ok"]})
+    if shutil.which("chronyc"):
+        step = run(["chronyc", "makestep"], timeout=20)
+        steps.append({"step": "chronyc-makestep", "ok": step["ok"]})
+    else:
+        unit = _first_active_unit(["systemd-timesyncd.service"])
+        if unit:
+            step = run(["systemctl", "restart", "--", unit], timeout=40)
+            steps.append({"step": "restart-timesyncd", "ok": step["ok"]})
+    if not any(entry["ok"] for entry in steps):
+        raise Failed("no time synchronisation method succeeded", json.dumps(steps))
+    return {"steps": steps}
+
+
+def verb_act_flush_dns(args: list) -> dict:
+    if args:
+        raise Rejected("act flush-dns takes no arguments")
+    if shutil.which("resolvectl"):
+        result = run(["resolvectl", "flush-caches"], timeout=20)
+        if result["ok"]:
+            return {"method": "resolvectl"}
+    unit = _first_active_unit(["systemd-resolved.service"])
+    if unit:
+        result = run(["systemctl", "restart", "--", unit], timeout=40)
+        if result["ok"]:
+            return {"method": "restart-resolved"}
+    raise Failed("no DNS cache to flush", "")
+
+
+def verb_act_prune_dangling_images(args: list) -> dict:
+    if args:
+        raise Rejected("act prune-dangling-images takes no arguments")
+    # Dangling only: untagged and unreferenced. Images the updater needs for a
+    # rollback are tagged and therefore never touched.
+    result = run(["docker", "image", "prune", "-f"], timeout=120)
+    _docker_or_root(result)
+    if not result["ok"]:
+        raise Failed("prune failed", result.get("err") or "")
+    return {"output": (result.get("out") or "").strip()[:2000]}
+
+
+def verb_act_restart_power_agent(args: list) -> dict:
+    if args:
+        raise Rejected("act restart-power-agent takes no arguments")
+    result = run(["systemctl", "restart", "--", "kassio-power-agent.service"], timeout=40)
+    if not result["ok"]:
+        raise Failed("restart failed", result.get("err") or "")
+    return {"restarted": "kassio-power-agent.service"}
+
+
+def verb_act_reboot(args: list) -> dict:
+    if args:
+        raise Rejected("act reboot takes no arguments")
+    result = run(["systemctl", "reboot"], timeout=15)
+    if not result["ok"]:
+        raise Failed("reboot failed", result.get("err") or "")
+    return {"scheduled": "reboot"}
+
+
+def verb_act_poweroff(args: list) -> dict:
+    if args:
+        raise Rejected("act poweroff takes no arguments")
+    result = run(["systemctl", "poweroff"], timeout=15)
+    if not result["ok"]:
+        raise Failed("poweroff failed", result.get("err") or "")
+    return {"scheduled": "poweroff"}
+
+
+def verb_act_write_config(args: list) -> dict:
+    """Read JSON from stdin, back the current file up, write atomically."""
+    if args:
+        raise Rejected("act write-config takes no arguments")
+    if os.geteuid() != 0:
+        raise NeedsRoot()
+    payload = sys.stdin.read(MAX_CONFIG_BYTES + 1)
+    if len(payload) > MAX_CONFIG_BYTES:
+        raise Rejected("configuration too large")
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise Rejected(f"configuration is not valid JSON: {exc}")
+    if not isinstance(document, dict) or "schema_version" not in document:
+        raise Rejected("configuration must be an object with schema_version")
+
+    os.makedirs(CONFIG_DIR, mode=0o755, exist_ok=True)
+    backup = None
+    if os.path.exists(CONFIG_PATH):
+        stamp = _timestamp()
+        backup = f"{CONFIG_PATH}.bak-{stamp}"
+        try:
+            shutil.copy2(CONFIG_PATH, backup)
+        except OSError as exc:
+            raise Failed("could not create backup", str(exc))
+
+    serialised = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=False)
+    handle = tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=CONFIG_DIR, prefix=".expected-config.",
+        suffix=".tmp", delete=False,
+    )
+    try:
+        with handle:
+            handle.write(serialised + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(handle.name, 0o644)
+        os.replace(handle.name, CONFIG_PATH)
+    except OSError as exc:
+        try:
+            os.unlink(handle.name)
+        except OSError:
+            pass
+        raise Failed("could not write configuration", str(exc))
+    return {"written": CONFIG_PATH, "backup": backup}
+
+
+def _timestamp() -> str:
+    import datetime
+    return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+# --------------------------------------------------------------------------
+# Dispatch
+# --------------------------------------------------------------------------
+
+
+class NeedsRoot(Exception):
+    pass
+
+
+class NoTool(Exception):
+    pass
+
+
+class Failed(Exception):
+    def __init__(self, message: str, detail: str = ""):
+        super().__init__(message)
+        self.detail = detail
+
+
+READ_VERBS = {
+    "system": verb_read_system,
+    "timesync": verb_read_timesync,
+    "boots": verb_read_boots,
+    "network": verb_read_network,
+    "services": verb_read_services,
+    "usb": verb_read_usb,
+    "smart": verb_read_smart,
+    "journal": verb_read_journal,
+    "containers": verb_read_containers,
+    "container-inspect": verb_read_container_inspect,
+    "container-logs": verb_read_container_logs,
+}
+
+ACT_VERBS = {
+    "noop": verb_act_noop,
+    "restart-container": verb_act_restart_container,
+    "restart-network": verb_act_restart_network,
+    "renew-dhcp": verb_act_renew_dhcp,
+    "sync-time": verb_act_sync_time,
+    "flush-dns": verb_act_flush_dns,
+    "prune-dangling-images": verb_act_prune_dangling_images,
+    "restart-power-agent": verb_act_restart_power_agent,
+    "reboot": verb_act_reboot,
+    "poweroff": verb_act_poweroff,
+    "write-config": verb_act_write_config,
+}
+
+
+def emit(payload: dict, code: int) -> int:
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False))
+    sys.stdout.write("\n")
+    return code
+
+
+def main(argv: list) -> int:
+    if len(argv) >= 1 and argv[0] in ("--version", "-V"):
+        return emit({"ok": True, "data": {"version": HELPER_VERSION}}, EXIT_OK)
+    if len(argv) < 2:
+        return emit({"ok": False, "error": "usage: diag-helper <read|act> <verb> [args]"},
+                    EXIT_USAGE)
+
+    mode, verb, args = argv[0], argv[1], list(argv[2:])
+    table = READ_VERBS if mode == "read" else ACT_VERBS if mode == "act" else None
+    if table is None:
+        return emit({"ok": False, "error": "unknown mode"}, EXIT_USAGE)
+    handler = table.get(verb)
+    if handler is None:
+        return emit({"ok": False, "error": "unknown verb"}, EXIT_USAGE)
+
+    try:
+        return emit({"ok": True, "data": handler(args)}, EXIT_OK)
+    except Rejected as exc:
+        return emit({"ok": False, "error": str(exc)}, EXIT_USAGE)
+    except NeedsRoot:
+        return emit({"ok": False, "error": "needs root"}, EXIT_NEEDS_ROOT)
+    except NoTool as exc:
+        return emit({"ok": False, "error": "tool not installed", "detail": str(exc)},
+                    EXIT_NO_TOOL)
+    except Failed as exc:
+        return emit({"ok": False, "error": str(exc), "detail": exc.detail[:2000]},
+                    EXIT_FAILED)
+    except Exception as exc:  # never leak a traceback to the caller's stdout
+        print(f"diag-helper: unexpected error: {exc!r}", file=sys.stderr)
+        return emit({"ok": False, "error": "unexpected helper error"}, EXIT_FAILED)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

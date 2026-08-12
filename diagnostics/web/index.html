@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>POS Diagnose</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◆</span>
+    <span data-i18n="ui.app_title">POS Diagnose</span>
+  </div>
+  <div class="topbar-actions">
+    <span id="pos-badge" class="badge badge-hidden"></span>
+    <button id="pos-logout" type="button" class="button button-quiet button-hidden"
+            data-i18n="ui.pos.sign_out">Abmelden</button>
+    <span id="session-badge" class="badge badge-hidden"></span>
+    <button id="lock-button" type="button" class="button button-quiet button-hidden"
+            data-i18n="ui.btn.lock">Sperren</button>
+    <button id="report-button" type="button" class="button"
+            data-i18n="ui.btn.report">Support-Report erstellen</button>
+    <button id="checkall-button" type="button" class="button button-primary"
+            data-i18n="ui.btn.check_all">Alles prüfen</button>
+    <label class="language">
+      <span class="visually-hidden" data-i18n="ui.language">Sprache</span>
+      <select id="language-select">
+        <option value="de">Deutsch</option>
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs" role="tablist"></nav>
+
+<main id="panels">
+  <section class="panel" id="panel-overview" role="tabpanel"></section>
+  <section class="panel" id="panel-system" role="tabpanel" hidden></section>
+  <section class="panel" id="panel-network" role="tabpanel" hidden></section>
+  <section class="panel" id="panel-devices" role="tabpanel" hidden></section>
+  <section class="panel" id="panel-docker" role="tabpanel" hidden></section>
+  <section class="panel" id="panel-setup" role="tabpanel" hidden></section>
+</main>
+
+<div id="dialog-host" class="dialog-host" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

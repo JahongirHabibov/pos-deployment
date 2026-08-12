@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=POS Diagnose
+Name[en]=POS Diagnostics
+Name[ru]=Диагностика POS
+Comment=Gerät prüfen und häufige Störungen selbst beheben
+Comment[en]=Check the device and fix common faults yourself
+Comment[ru]=Проверка устройства и устранение частых неисправностей
+Exec=xdg-open http://127.0.0.1:9120/
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+Keywords=POS;Kasse;Diagnose;Drucker;Printer;

@@ -113,5 +113,10 @@
   "s2_hint_sudo": "Sudo password of the current user for Docker commands.",
   "s2_hint_backup_user": "Username for the Backup Web UI (default: admin).",
   "s1_chk_wsl2": "Enable WSL 2 / Docker without Sudo mode",
-  "s2_err_missing_wsl2": "Please enter username and token."
+  "s2_err_missing_wsl2": "Please enter username and token.",
+  "s1_err_host_compose_dir": "The path to the pos-deployment directory is wrong:\n\n{path}\n\nThere is no docker-compose.prod.yml there. With a wrong path the updater cannot update itself. Suggested: {suggestion}",
+  "s3_diagnostics": "Install diagnostics system (recommended)",
+  "s3_diagnostics_hint": "Sets up a local diagnostics and repair tool the customer opens in a browser at http://127.0.0.1:9120/. It checks printers, network, clock and the POS services, and fixes the most common faults without a technician visit.",
+  "s3_diagnostics_ok": "✓ Diagnostics system installed — available at http://127.0.0.1:9120/",
+  "s3_diagnostics_fail": "✗ The diagnostics system could not be installed: {exc} — the POS still works."
 }

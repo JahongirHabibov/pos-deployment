@@ -2,6 +2,12 @@
 .env
 .env.backup
 *.env.backup
+# pos-updater rewrites .env in place and leaves .env.bak-<epoch> next to it.
+# Those copies hold every secret the original does, so they must never be
+# committable in a public repository.
+.env.bak-*
+.env.bak
+*.env.bak*
 
 # -- Python cache --
 __pycache__/

@@ -37,6 +37,8 @@ LOCALES_DIR     = REPO_DIR / "locales"
 POS_AUTH_FILE   = Path.home() / ".docker" / "pos-auth.json"
 KIOSK_AGENT_DIR = REPO_DIR / "kiosk-agent"
 KIOSK_AGENT_INSTALL = KIOSK_AGENT_DIR / "install.sh"
+DIAGNOSTICS_DIR = REPO_DIR / "diagnostics"
+DIAGNOSTICS_INSTALL = DIAGNOSTICS_DIR / "install.sh"
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 C_BRAND     = "#1a1a2e"
@@ -366,19 +368,28 @@ def _has_ghcr_credentials() -> tuple[bool, str]:
 # image (see kiosk-agent/README.md).
 KIOSK_AGENT_ENV_KEY = "POS_KIOSK_AGENT"
 
+# ── Diagnostics service ──────────────────────────────────────────────────────
+# Installed on the host rather than shipped as a container on purpose: one of
+# its jobs is diagnosing a Docker installation that no longer starts, which a
+# container cannot do. See diagnostics/README.md.
+DIAGNOSTICS_ENV_KEY = "POS_DIAGNOSTICS"
 
-def _step3_row_offsets(show_sudo: bool, show_kiosk: bool) -> tuple[int, int, int]:
+
+def _step3_row_offsets(show_sudo: bool, show_kiosk: bool,
+                       show_diagnostics: bool = False) -> tuple[int, int, int]:
     """Grid-row offsets for the optional widgets on step 3.
 
     Each optional block takes two rows (input plus its hint/toggle). The log
     widget has to start below whatever is actually shown — get this wrong and
-    the log overlaps the sudo field or the kiosk checkbox.
+    the log overlaps the sudo field or one of the checkboxes.
 
-    Returns (sudo_offset, kiosk_offset, total).
+    Returns (sudo_offset, kiosk_offset, total). The diagnostics block sits
+    below both, so its own offset is the sum of the first two.
     """
     sudo = 2 if show_sudo else 0
     kiosk = 2 if show_kiosk else 0
-    return sudo, kiosk, sudo + kiosk
+    diagnostics = 2 if show_diagnostics else 0
+    return sudo, kiosk, sudo + kiosk + diagnostics
 
 
 def _kiosk_agent_origin(port: str) -> str:
@@ -519,6 +530,7 @@ class InstallerApp:
         """
         if not ENV_FILE.is_file():
             self._data["deployment_repo"] = DEFAULT_DEPLOYMENT_REPO
+            self._data["host_compose_dir"] = str(REPO_DIR)
             return
         env_vals = _read_env_keys([
             "IMAGE_BACKEND", "IMAGE_FRONTEND", "IMAGE_IMAGE_SERVICE",
@@ -539,6 +551,12 @@ class InstallerApp:
             value = env_vals.get(env_key, "")
             if value:
                 self._data[data_key] = value
+        # This installer IS in the deployment directory, so the field never has
+        # to be guessed. It used to start empty and accept whatever was typed:
+        # a path with a typo is created — empty — by Docker as a bind-mount
+        # source, and the updater then fails every self-update against an empty
+        # directory with no visible error.
+        self._data.setdefault("host_compose_dir", str(REPO_DIR))
         # A missing key, or the "<org>/pos-deployment" placeholder copied from
         # .env.example, must not silently disable the manifest prefill.
         self._data["deployment_repo"] = _resolve_deployment_repo(
@@ -1090,6 +1108,19 @@ class InstallerApp:
     def _run_step1(self) -> None:
         vals = {k: v.get().strip() for k, v in self._s1_vars.items()}
 
+        # Refuse a deployment directory that is not one. Wrong here means every
+        # later updater self-update fails silently, on a machine nobody is
+        # watching, months after this screen was filled in.
+        host_dir = vals.get("host_compose_dir", "")
+        if not host_dir or not (Path(host_dir) / COMPOSE_FILE.name).is_file():
+            messagebox.showerror(
+                t("err_title_missing"),
+                t("s1_err_host_compose_dir").format(
+                    path=host_dir or "—", suggestion=str(REPO_DIR)
+                ),
+            )
+            return
+
         # ── Idee 1: skip provisioning when checkbox is set ────────────────
         if self._s1_already_prov.get():
             if not ENV_FILE.is_file():
@@ -1540,8 +1571,10 @@ class InstallerApp:
         show_sudo = not self._data.get("sudo_password") and not self._data.get("wsl2")
         # Kiosk-Power-Agent — nur wo es einen systemd-Host zum Ausschalten gibt.
         show_kiosk = KIOSK_AGENT_INSTALL.is_file() and not self._data.get("wsl2")
-        sudo_row_offset, _kiosk_row_offset, extra_rows = _step3_row_offsets(
-            show_sudo, show_kiosk)
+        # Diagnostics service — needs a systemd host, same as the power agent.
+        show_diagnostics = DIAGNOSTICS_INSTALL.is_file() and not self._data.get("wsl2")
+        sudo_row_offset, kiosk_row_offset, extra_rows = _step3_row_offsets(
+            show_sudo, show_kiosk, show_diagnostics)
 
         self._s3_sudo_var: tk.StringVar | None = None
         self._s3_sudo_entry: tk.Entry | None = None
@@ -1583,6 +1616,27 @@ class InstallerApp:
             ).grid(row=next_row+3+sudo_row_offset, column=0, columnspan=2,
                    sticky="w", pady=(0, 4))
 
+        # ── Diagnostics service — optional host-level install ──────────────
+        self._s3_diagnostics_var: tk.BooleanVar | None = None
+        if show_diagnostics:
+            enabled_before = _read_env_keys([DIAGNOSTICS_ENV_KEY]).get(
+                DIAGNOSTICS_ENV_KEY, "").strip().lower() == "true"
+            self._s3_diagnostics_var = tk.BooleanVar(value=enabled_before)
+            diagnostics_row = next_row + 2 + sudo_row_offset + kiosk_row_offset
+            tk.Checkbutton(
+                c, text=t("s3_diagnostics"),
+                variable=self._s3_diagnostics_var,
+                bg="white", font=("Segoe UI", self._get_font_size(10)),
+                anchor="w", justify=tk.LEFT,
+            ).grid(row=diagnostics_row, column=0, columnspan=2,
+                   sticky="w", pady=(6, 0))
+            tk.Label(
+                c, text=t("s3_diagnostics_hint"), bg="white", fg="#555",
+                font=("Segoe UI", self._get_font_size(9)),
+                wraplength=self._get_wraplength(560), anchor="w", justify=tk.LEFT,
+            ).grid(row=diagnostics_row + 1, column=0, columnspan=2,
+                   sticky="w", pady=(0, 4))
+
         tk.Label(c, text=t("s3_lbl_log"), bg="white",
                  font=("Segoe UI", self._get_font_size(10), "bold")).grid(
             row=next_row+2+extra_rows, column=0, columnspan=2, sticky="w", pady=(4, 2))
@@ -1615,6 +1669,9 @@ class InstallerApp:
         kiosk_var = getattr(self, "_s3_kiosk_var", None)
         if kiosk_var is not None:
             self._data["install_kiosk_agent"] = bool(kiosk_var.get())
+        diagnostics_var = getattr(self, "_s3_diagnostics_var", None)
+        if diagnostics_var is not None:
+            self._data["install_diagnostics"] = bool(diagnostics_var.get())
 
         self._btn_back.configure(state=tk.DISABLED)
 
@@ -1874,6 +1931,55 @@ class InstallerApp:
                                   t("s3_kiosk_agent_fail", exc=f"exit {p.returncode}"),
                                   C_DANGER)
 
+                def _install_diagnostics() -> None:
+                    """Install the diagnostics service after a successful deploy.
+
+                    Runs last and never fails the deployment: without it the POS
+                    works exactly as before, the customer merely loses the
+                    self-service diagnosis. The script itself refuses rather
+                    than displaces if its port is taken.
+                    """
+                    self._log(self._s3_log, "")
+                    self._log(
+                        self._s3_log,
+                        "▶ sudo diagnostics/install.sh --deployment-dir "
+                        f"{REPO_DIR}",
+                        "#7ec8e3",
+                    )
+                    cmd = ["sudo", "-k", "-S", "bash", str(DIAGNOSTICS_INSTALL),
+                           "--deployment-dir", str(REPO_DIR)]
+                    try:
+                        p = subprocess.Popen(
+                            cmd,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            cwd=str(REPO_DIR),
+                            env=env,
+                        )
+                    except OSError as exc:
+                        self._log(self._s3_log,
+                                  t("s3_diagnostics_fail", exc=str(exc)), C_DANGER)
+                        return
+                    assert p.stdin is not None
+                    p.stdin.write(sudo_password + "\n")
+                    p.stdin.flush()
+                    p.stdin.close()
+                    assert p.stdout is not None
+                    for line in p.stdout:
+                        clean = line.rstrip()
+                        if clean.startswith("[sudo]"):
+                            continue
+                        self._log(self._s3_log, clean)
+                    p.wait()
+                    if p.returncode == 0:
+                        self._log(self._s3_log, t("s3_diagnostics_ok"), C_SUCCESS)
+                    else:
+                        self._log(self._s3_log,
+                                  t("s3_diagnostics_fail", exc=f"exit {p.returncode}"),
+                                  C_DANGER)
+
                 def _sudo_capture(cmd: list[str], timeout: int = 20):
                     """Run a sudo command, feed the password, return the process."""
                     p = subprocess.Popen(
@@ -1987,6 +2093,15 @@ class InstallerApp:
                         _patch_env_keys({KIOSK_AGENT_ENV_KEY: "true" if wanted else "false"})
                         if wanted:
                             _install_kiosk_agent(port)
+
+                    # Same rule as above: unticking stops future installs, it
+                    # does not remove a service that is already there. Use
+                    # diagnostics/uninstall.sh for that.
+                    if getattr(self, "_s3_diagnostics_var", None) is not None:
+                        wanted = bool(self._data.get("install_diagnostics"))
+                        _patch_env_keys({DIAGNOSTICS_ENV_KEY: "true" if wanted else "false"})
+                        if wanted:
+                            _install_diagnostics()
 
                     def _finish():
                         self._btn_next.configure(

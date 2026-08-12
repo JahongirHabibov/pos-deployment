@@ -113,5 +113,10 @@
   "s2_hint_sudo": "Sudo-Passwort des aktuellen Benutzers für Docker-Befehle.",
   "s2_hint_backup_user": "Benutzername für das Backup-Web-UI (Standard: admin).",
   "s1_chk_wsl2": "WSL 2 / Docker ohne Sudo Modus aktivieren",
-  "s2_err_missing_wsl2": "Bitte Benutzername und Token eingeben."
+  "s2_err_missing_wsl2": "Bitte Benutzername und Token eingeben.",
+  "s1_err_host_compose_dir": "Der Pfad zum pos-deployment-Verzeichnis stimmt nicht:\n\n{path}\n\nDort liegt keine docker-compose.prod.yml. Der Updater kann sich mit einem falschen Pfad nicht selbst aktualisieren. Vorgeschlagen: {suggestion}",
+  "s3_diagnostics": "Diagnose-System installieren (empfohlen)",
+  "s3_diagnostics_hint": "Richtet ein lokales Diagnose- und Reparaturwerkzeug ein, das der Kunde unter http://127.0.0.1:9120/ im Browser öffnet. Damit lassen sich Drucker, Netzwerk, Uhrzeit und die Kassendienste selbst prüfen und die häufigsten Störungen ohne Technikereinsatz beheben.",
+  "s3_diagnostics_ok": "✓ Diagnose-System installiert — erreichbar unter http://127.0.0.1:9120/",
+  "s3_diagnostics_fail": "✗ Diagnose-System konnte nicht installiert werden: {exc} — die Kasse läuft trotzdem."
 }
