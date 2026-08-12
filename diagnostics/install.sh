@@ -94,7 +94,10 @@ chmod -R go-w "${INSTALL_DIR}"
 # effect: a malformed sudoers file can lock everyone out of sudo.
 say "Installing the permission rule"
 SUDOERS_TMP="$(mktemp)"
-trap 'rm -f "${SUDOERS_TMP}"' EXIT
+UNIT_TMP=""
+# Both temporaries are cleaned on every exit path, including the failure paths
+# that "set -e" takes without reaching the explicit rm below.
+trap 'rm -f "${SUDOERS_TMP}" "${UNIT_TMP:-}"' EXIT
 cat >"${SUDOERS_TMP}" <<EOF
 # Installed by kassio-diagnostics. Read verbs only.
 # Every mutating verb is deliberately absent and therefore still requires the

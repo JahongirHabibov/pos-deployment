@@ -62,6 +62,20 @@ def empty_config() -> dict:
     }
 
 
+def stamp(document: dict) -> dict:
+    """Record when the configuration was written. Never touches other fields."""
+    if not isinstance(document, dict):
+        return document
+    import datetime
+    site = document.get("site")
+    if not isinstance(site, dict):
+        site = {}
+        document["site"] = site
+    site["configured_at"] = datetime.datetime.now().astimezone().isoformat(
+        timespec="seconds")
+    return document
+
+
 def load(path: str = CONFIG_PATH):
     """Return (config, findings). A missing or broken file is not an exception."""
     if not os.path.exists(path):

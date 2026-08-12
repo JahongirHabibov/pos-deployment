@@ -171,26 +171,41 @@ def run(context, selected_groups=None) -> list:
         return []
 
     results = []
+    pool = None
     try:
-        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_CHECKS, len(entries))) as pool:
-            futures = {pool.submit(_execute, entry, context): entry for entry in entries}
-            for future, entry in futures.items():
-                try:
-                    results.extend(future.result(timeout=CHECK_TIMEOUT_SECONDS))
-                except FutureTimeout:
-                    LOG.warning("check %s exceeded %ss", entry["id"],
-                                CHECK_TIMEOUT_SECONDS)
-                    results.append(_failure_result(
-                        entry, UNKNOWN, "check.timed_out", "",
-                        CHECK_TIMEOUT_SECONDS * 1000))
-                except Exception as exc:  # noqa: BLE001 - defensive, see docstring
-                    LOG.exception("collecting %s failed", entry["id"])
-                    results.append(_failure_result(entry, UNKNOWN, "check.crashed",
-                                                   repr(exc), 0))
+        pool = ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_CHECKS, len(entries)))
+        futures = {pool.submit(_execute, entry, context): entry for entry in entries}
+        # One shared deadline rather than one timeout per future: waiting on
+        # each in turn would let a slow check spend the full timeout and the
+        # next one spend it again, so the caller's worst case would grow with
+        # the number of checks instead of staying bounded.
+        deadline = time.monotonic() + CHECK_TIMEOUT_SECONDS
+        for future, entry in futures.items():
+            remaining = max(0.0, deadline - time.monotonic())
+            try:
+                results.extend(future.result(timeout=remaining))
+            except FutureTimeout:
+                LOG.warning("check %s exceeded the %ss budget", entry["id"],
+                            CHECK_TIMEOUT_SECONDS)
+                results.append(_failure_result(
+                    entry, UNKNOWN, "check.timed_out", "",
+                    CHECK_TIMEOUT_SECONDS * 1000))
+            except Exception as exc:  # noqa: BLE001 - defensive, see docstring
+                LOG.exception("collecting %s failed", entry["id"])
+                results.append(_failure_result(entry, UNKNOWN, "check.crashed",
+                                               repr(exc), 0))
     except Exception:  # pool creation itself failed — still return something
         LOG.exception("runner pool failed; falling back to sequential execution")
         for entry in entries:
             results.extend(_execute(entry, context))
+    finally:
+        if pool is not None:
+            # wait=False is the point of the timeout: exiting a "with" block
+            # would join every worker, so a hung check would still hold the
+            # answer back for as long as it liked. Queued work is cancelled;
+            # a check already running finishes on its own and is bounded by the
+            # command timeouts underneath it.
+            pool.shutdown(wait=False, cancel_futures=True)
 
     order = {entry["id"]: index for index, entry in enumerate(entries)}
     results.sort(key=lambda result: (order.get(result.id, 999), result.id))

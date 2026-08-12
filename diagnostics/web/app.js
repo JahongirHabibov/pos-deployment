@@ -122,13 +122,28 @@
 
   /* -------------------------------------------------------------- dialogs */
 
+  var dialogCleanup = null;
+
   function closeDialog() {
+    // Runs whatever the open dialog left behind — a log window's refresh timer
+    // has to stop however the dialog is dismissed, not only via its close
+    // button. Escape and a backdrop click would otherwise leave it polling the
+    // server forever, into a detached node nobody can see.
+    if (dialogCleanup) {
+      var cleanup = dialogCleanup;
+      dialogCleanup = null;
+      try { cleanup(); } catch (error) { /* cleanup must never block closing */ }
+    }
     var host = document.getElementById("dialog-host");
     clear(host);
     host.hidden = true;
   }
 
-  function openDialog(title, bodyNodes, actionNodes) {
+  function openDialog(title, bodyNodes, actionNodes, onClose) {
+    // Closes any dialog already open, so its cleanup runs before this one
+    // replaces it in the host.
+    closeDialog();
+    dialogCleanup = onClose || null;
     var host = document.getElementById("dialog-host");
     clear(host);
     var dialog = el("div", { class: "dialog", role: "dialog", "aria-modal": "true" }, [
@@ -274,7 +289,7 @@
     return null;
   }
 
-  function runAction(actionId, params) {
+  function runAction(actionId, params, options) {
     var definition = actionDefinition(actionId);
     if (!definition) { return Promise.resolve(); }
     params = params || {};
@@ -290,9 +305,19 @@
           var data = response.payload.data || {};
           if (response.payload.ok) {
             toast(t(data.message_key, data.params || {}), "ok");
-            if (data.results) { mergeResults(data.results); }
-            if (actionId === "devices.scan") { showScanResults(data.data || {}); }
-            refresh();
+            if (data.results && data.results.length) {
+              // The server already re-ran the areas this repair touches;
+              // re-running everything on top would cost a second full sweep,
+              // including the network probes, for no new information.
+              mergeResults(data.results);
+              renderTabs();
+              renderActive();
+            } else {
+              refresh();
+            }
+            if (actionId === "devices.scan" && !(options && options.quiet)) {
+              showScanResults(data.data || {});
+            }
           } else {
             toast(t(data.message_key || "", data.params || {}) || errorText(response.payload),
                   "fail");
@@ -512,9 +537,9 @@
       }),
       el("button", {
         class: "button button-primary", text: t("ui.btn.close"),
-        onclick: function () { stop(); closeDialog(); }
+        onclick: closeDialog
       })
-    ]);
+    ], stop);
     load();
   }
 
@@ -700,6 +725,7 @@
   function renderSetupPanel() {
     var panel = document.getElementById("panel-setup");
     clear(panel);
+    panel.appendChild(el("h2", { text: t("ui.setup.title") }));
     panel.appendChild(el("p", { class: "intro", text: t("ui.setup.intro") }));
 
     if (!state.sessionToken) {
@@ -741,6 +767,28 @@
         field("ui.setup.technician", site.technician, function (v) { site.technician = v; })
       ])
     ]));
+
+    var identity = draft.identity || (draft.identity = {});
+    var current = (state.configMeta && state.configMeta.current_machine_id) || "";
+    if (current) {
+      var recorded = el("span", {
+        text: identity.machine_id_hash ? identity.machine_id_hash : "—"
+      });
+      panel.appendChild(el("div", { class: "section" }, [
+        el("h3", { text: t("check.system.machine_id.title") }),
+        el("p", { class: "hint", text: t("check.system.machine_id.not_recorded") }),
+        el("p", {}, [recorded]),
+        el("div", { class: "card-actions" }, [
+          el("button", {
+            class: "button", text: t("ui.setup.record_machine_id"),
+            onclick: function () {
+              identity.machine_id_hash = current;
+              recorded.textContent = current;
+            }
+          })
+        ])
+      ]));
+    }
 
     panel.appendChild(el("div", { class: "section" }, [
       el("h3", { text: t("ui.setup.network") }),
@@ -840,7 +888,9 @@
   }
 
   function suggestFromScan() {
-    runAction("devices.scan", {}).then(function (data) {
+    // quiet: the setup wizard shows its own picker, so the generic result
+    // dialog would only be opened to be replaced a moment later.
+    runAction("devices.scan", {}, { quiet: true }).then(function (data) {
       if (!data || !data.data) { return; }
       var found = data.data.found || [];
       if (!found.length) { return; }

@@ -50,6 +50,7 @@ SESSION_HEADER = "X-Kassio-Diag-Session"
 POS_HEADER = "X-Kassio-Diag-Pos"
 
 CHECK_CACHE_SECONDS = 5
+MAX_BODY_BYTES = 512 * 1024
 ALLOWED_LOG_LINES = (50, 200, 1000)
 STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -188,17 +189,43 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, key: str, status: int = 400, **params) -> None:
         self._json({"ok": False, "error": {"key": key, "params": params}}, status)
 
-    def _body(self) -> dict:
+    def _drain_body(self) -> None:
+        """Read the request body up front, before any decision to reject.
+
+        This connection speaks HTTP/1.1, so it stays open for the next request.
+        An early rejection that never reads the body would leave those bytes in
+        the socket, and the next request on the same connection would parse them
+        as a request line. The browser reuses connections, so an ordinary
+        "session expired" answer would corrupt whatever the customer clicked
+        next.
+        """
+        self._raw_body = b""
         try:
             length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            return {}
-        if length <= 0 or length > 512 * 1024:
+        except (TypeError, ValueError):
+            length = 0
+        if length <= 0:
+            return
+        remaining = min(length, MAX_BODY_BYTES)
+        try:
+            self._raw_body = self.rfile.read(remaining)
+            # Anything beyond the accepted size still has to leave the socket.
+            left = length - remaining
+            while left > 0:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    break
+                left -= len(chunk)
+        except OSError:
+            self._raw_body = b""
+
+    def _body(self) -> dict:
+        raw = getattr(self, "_raw_body", b"")
+        if not raw:
             return {}
         try:
-            raw = self.rfile.read(length)
             payload = json.loads(raw.decode("utf-8"))
-        except (OSError, ValueError):
+        except (UnicodeDecodeError, ValueError):
             return {}
         return payload if isinstance(payload, dict) else {}
 
@@ -249,6 +276,9 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch("DELETE")
 
     def do_OPTIONS(self):
+        # Preflights carry no body, but this path bypasses _dispatch, so it
+        # drains as well rather than relying on that staying true.
+        self._drain_body()
         if not self._peer_allowed():
             self._error("error.forbidden", 403)
             return
@@ -261,6 +291,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method: str) -> None:
         try:
+            self._drain_body()
             if not self._peer_allowed():
                 self._error("error.forbidden", 403)
                 return
@@ -407,8 +438,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get_config(self) -> None:
         document, findings = self.app.config()
+        # Offered so the technician can record it with one click. The licence is
+        # bound to this identifier, and a check against nothing is worthless.
+        system = self.app.privileged.read("system")
+        current_machine_id = ""
+        if system.ok and isinstance(system.data, dict):
+            current_machine_id = str((system.data.get("machine_id") or {}).get("hash", ""))
         self._ok({
             "config": document,
+            "current_machine_id": current_machine_id,
             "template": config_module.empty_config(),
             "findings": [f.as_dict() for f in findings],
             "roles": list(config_module.ROLES),
@@ -428,6 +466,7 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(document, dict):
             self._error("error.rejected_argument", 400, value="config")
             return
+        document = config_module.stamp(document)
         findings = config_module.validate(document)
         if config_module.has_errors(findings):
             self._json({"ok": False,
@@ -601,7 +640,8 @@ class Handler(BaseHTTPRequestHandler):
         for name, value in SECURITY_HEADERS.items():
             self.send_header(name, value)
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
 
 class DiagnosticsServer(ThreadingHTTPServer):

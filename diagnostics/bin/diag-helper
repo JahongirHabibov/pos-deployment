@@ -352,10 +352,14 @@ def verb_read_services(args: list) -> dict:
         active = run(["systemctl", "is-active", "--", unit], timeout=8)
         enabled = run(["systemctl", "is-enabled", "--", unit], timeout=8)
         state = (active.get("out") or "").strip()
+        enabled_state = (enabled.get("out") or "").strip()
         units[unit] = {
             "active": state,
-            "enabled": (enabled.get("out") or "").strip(),
-            "installed": state != "" and state != "inactive" or enabled.get("rc") == 0,
+            "enabled": enabled_state,
+            # "systemctl is-enabled" exits non-zero for a unit that does not
+            # exist, which is what separates "not installed" from "installed
+            # but switched off".
+            "installed": enabled.get("rc") == 0 or state not in ("", "inactive"),
         }
     return {"units": units}
 

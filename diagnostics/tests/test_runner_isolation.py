@@ -122,3 +122,49 @@ def test_snapshot_reads_each_verb_only_once():
     assert snapshot.read("system") == "value"
     assert snapshot.read("network") == "value"
     assert calls == [("system", ()), ("network", ())]
+
+
+def test_a_hung_check_does_not_hold_back_the_answer(isolated_registry, monkeypatch):
+    """The timeout has to bound the wait, not just relabel the result.
+
+    Joining every worker on the way out would mean a stuck check still decides
+    when the customer sees the page, which is precisely the case the timeout
+    exists for.
+    """
+    monkeypatch.setattr(runner, "CHECK_TIMEOUT_SECONDS", 1)
+
+    def hung(context):
+        time.sleep(10)
+        return CheckResult(id="hung", group="demo", status=runner.OK, title_key="t")
+
+    register("demo", "fast", healthy("fast"))
+    register("demo", "hung", hung)
+
+    started = time.monotonic()
+    results = runner.run(context=None)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 5, f"run() waited {elapsed:.1f}s for a hung check"
+    by_id = {result.id: result for result in results}
+    assert by_id["fast"].status == runner.OK
+    assert by_id["hung"].message_key == "check.timed_out"
+
+
+def test_the_total_wait_does_not_grow_with_the_number_of_slow_checks(isolated_registry,
+                                                                     monkeypatch):
+    monkeypatch.setattr(runner, "CHECK_TIMEOUT_SECONDS", 2)
+
+    def slow(context):
+        time.sleep(10)
+        return CheckResult(id="slow", group="demo", status=runner.OK, title_key="t")
+
+    for index in range(4):
+        register("demo", f"slow.{index}", slow)
+
+    started = time.monotonic()
+    results = runner.run(context=None)
+    elapsed = time.monotonic() - started
+
+    # One shared budget, not one per check.
+    assert elapsed < 6, f"run() waited {elapsed:.1f}s for four slow checks"
+    assert all(result.message_key == "check.timed_out" for result in results)

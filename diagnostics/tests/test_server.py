@@ -301,3 +301,100 @@ def test_the_report_is_produced_even_with_no_data(running_server):
     assert headers["Content-Type"].startswith("text/plain")
     assert "attachment" in headers["Content-Disposition"]
     assert b"Support-Report" in body
+
+
+# ------------------------------------------------- connection correctness
+
+
+def test_a_rejected_request_leaves_the_connection_usable():
+    """A rejection must still consume the request body.
+
+    This connection is HTTP/1.1 and stays open. If an early rejection skipped
+    the body, those bytes would be parsed as the next request line — and the
+    browser reuses connections, so the customer's next click would break for a
+    reason that has nothing to do with what they clicked.
+    """
+    import http.client
+
+    # A dedicated server so the reuse is genuinely on one connection.
+    application = Application(
+        web_dir=os.path.join(DIAGNOSTICS_DIR, "web"),
+        locale_dir=os.path.join(DIAGNOSTICS_DIR, "locales"),
+        helper_path="/nonexistent/diag-helper",
+        config_path="/nonexistent/expected-config.json",
+        host="127.0.0.1", port=0)
+    application.privileged = FakePrivileged()
+    application.sessions._privileged = application.privileged
+    httpd = server_module.DiagnosticsServer(("127.0.0.1", 0), application)
+    port = httpd.server_address[1]
+    thread = threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.05},
+                              daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        payload = json.dumps({"params": {"container": "pos-backend"}})
+        connection.request("POST", "/api/actions/container.restart", body=payload,
+                           headers={"Content-Type": "application/json",
+                                    "X-Kassio-Diag": "1"})
+        first = connection.getresponse()
+        first.read()
+        assert first.status == 401
+
+        # Same connection, straight after the rejection.
+        connection.request("GET", "/api/health")
+        second = connection.getresponse()
+        body = second.read()
+        assert second.status == 200
+        assert json.loads(body)["ok"] is True
+        connection.close()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def test_an_oversized_body_is_refused_without_breaking_the_connection(running_server):
+    base, _ = running_server
+    huge = {"params": {"container": "pos-backend", "padding": "x" * 700000}}
+    status, _, _ = request(base, "/api/actions/container.restart", "POST", huge,
+                           mutating())
+    assert status in (400, 401)
+    status, _, _ = request(base, "/api/health")
+    assert status == 200
+
+
+def test_head_sends_headers_without_a_body(running_server):
+    import http.client
+    base, _ = running_server
+    port = int(base.rsplit(":", 1)[1])
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    connection.request("HEAD", "/api/health")
+    response = connection.getresponse()
+    body = response.read()
+    assert response.status == 200
+    assert body == b""
+    assert response.getheader("Content-Length") is not None
+    connection.close()
+
+
+def test_saving_the_configuration_records_when_it_happened():
+    from kassio_diagnostics import config as config_module
+    document = {"site": {"name": "Filiale", "technician": "t"}}
+    stamped = config_module.stamp(document)
+    assert stamped["site"]["configured_at"]
+    assert stamped["site"]["name"] == "Filiale"
+    assert stamped["site"]["technician"] == "t"
+
+
+def test_stamping_tolerates_a_missing_site_block():
+    from kassio_diagnostics import config as config_module
+    stamped = config_module.stamp({"schema_version": 1})
+    assert stamped["site"]["configured_at"]
+
+
+def test_the_configuration_endpoint_offers_the_current_device_identity(running_server):
+    base, _ = running_server
+    _, body, _ = request(base, "/api/config")
+    # The helper is a stub here, so the value is empty — the field must still
+    # exist, because the setup panel keys its "record identity" button off it.
+    assert "current_machine_id" in json.loads(body)["data"]
