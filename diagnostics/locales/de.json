@@ -303,5 +303,9 @@
   "ui.tab.network": "Netzwerk",
   "ui.tab.overview": "Übersicht",
   "ui.tab.setup": "Techniker-Setup",
-  "ui.tab.system": "Gerät & System"
+  "ui.tab.system": "Gerät & System",
+  "ui.theme": "Darstellung",
+  "ui.theme.auto": "Automatisch",
+  "ui.theme.dark": "Dunkel",
+  "ui.theme.light": "Hell"
 }

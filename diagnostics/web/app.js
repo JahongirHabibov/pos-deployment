@@ -25,6 +25,7 @@
     posToken: "",
     posUsername: "",
     activeTab: "overview",
+    theme: "auto",
     config: null,
     configTemplate: null,
     roles: [],
@@ -1053,6 +1054,33 @@
     });
   }
 
+  /* ---------------------------------------------------------------- theme */
+
+  function applyTheme(theme) {
+    // "auto" removes the attribute so the system preference decides again.
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.setAttribute("data-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      theme = "auto";
+    }
+    state.theme = theme;
+    try { window.localStorage.setItem("kassio-diag-theme", theme); }
+    catch (error) { /* private mode: the choice simply does not persist */ }
+    var select = document.getElementById("theme-select");
+    if (select) { select.value = theme; }
+  }
+
+  function labelThemeOptions() {
+    var select = document.getElementById("theme-select");
+    if (!select) { return; }
+    var labels = { auto: t("ui.theme.auto"), light: t("ui.theme.light"),
+                   dark: t("ui.theme.dark") };
+    Array.prototype.forEach.call(select.options, function (option) {
+      if (labels[option.value]) { option.textContent = labels[option.value]; }
+    });
+  }
+
   function applyStaticText() {
     document.querySelectorAll("[data-i18n]").forEach(function (node) {
       node.textContent = t(node.getAttribute("data-i18n"));
@@ -1070,6 +1098,7 @@
         catch (error) { /* private mode: the choice simply does not persist */ }
         document.getElementById("language-select").value = state.language;
         applyStaticText();
+        labelThemeOptions();
         renderPosBadge();
         renderTabs();
         renderActive();
@@ -1077,6 +1106,12 @@
   }
 
   function start() {
+    var storedTheme = null;
+    try { storedTheme = window.localStorage.getItem("kassio-diag-theme"); }
+    catch (error) { storedTheme = null; }
+    applyTheme(storedTheme || "auto");
+    document.getElementById("theme-select")
+      .addEventListener("change", function (event) { applyTheme(event.target.value); });
     document.getElementById("language-select")
       .addEventListener("change", function (event) { setLanguage(event.target.value); });
     document.getElementById("checkall-button")

@@ -38,12 +38,15 @@ rm -f /etc/chromium/policies/managed/kassio-diagnostics.json \
       /etc/chromium-browser/policies/managed/kassio-diagnostics.json
 rm -rf "${INSTALL_DIR}"
 
-# The Firefox policy file is shared, so it is only removed when this tool is
-# demonstrably its only content.
+# Current versions never write a Firefox policy. Installations made before that
+# changed did, so the file is still cleaned up here — but only when this tool is
+# demonstrably its only content, since Firefox keeps one shared policies.json.
 FIREFOX_POLICY=/etc/firefox/policies/policies.json
-if [[ -f "${FIREFOX_POLICY}" ]] && grep -q "127.0.0.1:9120" "${FIREFOX_POLICY}" \
-   && [[ "$(wc -l <"${FIREFOX_POLICY}")" -le 3 ]]; then
+if [[ -f "${FIREFOX_POLICY}" ]] && grep -q "127.0.0.1:91" "${FIREFOX_POLICY}" \
+   && grep -q "POS Diagnose" "${FIREFOX_POLICY}" \
+   && [[ "$(wc -c <"${FIREFOX_POLICY}")" -le 400 ]]; then
   rm -f "${FIREFOX_POLICY}"
+  echo "Removed the Firefox bookmark left by an earlier version."
 fi
 
 if [[ "${MODE}" == "ask" ]]; then

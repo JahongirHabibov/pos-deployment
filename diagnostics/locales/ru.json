@@ -303,5 +303,9 @@
   "ui.tab.network": "Сеть",
   "ui.tab.overview": "Обзор",
   "ui.tab.setup": "Настройка техника",
-  "ui.tab.system": "Устройство и система"
+  "ui.tab.system": "Устройство и система",
+  "ui.theme": "Оформление",
+  "ui.theme.auto": "Автоматически",
+  "ui.theme.dark": "Тёмное",
+  "ui.theme.light": "Светлое"
 }

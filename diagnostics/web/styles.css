@@ -28,8 +28,11 @@
   --gap: 16px;
 }
 
+/* Dark tokens live in two places on purpose: once behind the system
+   preference, once behind an explicit choice. The preference block is
+   guarded so that picking "light" by hand wins over a dark desktop. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #131922;
     --surface: #1b232e;
     --surface-2: #222c39;
@@ -49,7 +52,33 @@
   }
 }
 
+:root[data-theme="dark"] {
+    --bg: #131922;
+    --surface: #1b232e;
+    --surface-2: #222c39;
+    --border: #33404f;
+    --text: #e8edf3;
+    --text-muted: #9fadbc;
+    --accent: #5a9ee0;
+    --accent-text: #0d1319;
+    --ok: #59d18d;
+    --ok-bg: #16301f;
+    --warn: #e8b862;
+    --warn-bg: #322613;
+    --fail: #f08585;
+    --fail-bg: #351a1a;
+    --neutral: #a8b4c0;
+    --neutral-bg: #26303c;
+}
+
 * { box-sizing: border-box; }
+
+/* The hidden attribute has to win over any display declared below. A class
+   selector outranks the user agent's [hidden] { display: none }, so a rule like
+   .dialog-host { display: flex } would leave the modal backdrop lying over the
+   whole page from the first paint — dimming everything and swallowing every
+   click, with nothing in the console to explain it. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;

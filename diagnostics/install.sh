@@ -6,6 +6,10 @@
 #
 #   sudo ./install.sh
 #   sudo ./install.sh --port 9120 --deployment-dir /opt/pos-deployment
+#   sudo ./install.sh --bookmark      also add a Chromium/Chrome bookmark
+#
+# No browser is touched unless --bookmark is given, and Firefox is never
+# touched: it keeps one shared policies.json that this tool does not own.
 #
 # The installer refuses rather than displaces: if the port is taken or the
 # sudoers rule does not validate, nothing is installed. Every step is
@@ -26,6 +30,9 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT=9120
 DEPLOYMENT_DIR=""
 ADMIN_USER="${SUDO_USER:-}"
+# Off by default: a browser policy applies to every profile on the machine, so
+# it is the administrator's call, not the installer's.
+WANT_BOOKMARK=0
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -35,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="${2:-}"; shift 2 ;;
     --deployment-dir) DEPLOYMENT_DIR="${2:-}"; shift 2 ;;
     --user) ADMIN_USER="${2:-}"; shift 2 ;;
+    --bookmark) WANT_BOOKMARK=1; shift ;;
     -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -173,34 +181,30 @@ chmod 0644 "${DESKTOP_PATH}"
 command -v update-desktop-database >/dev/null 2>&1 \
   && update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 
-# Managed bookmark, best effort only — a browser without it is a missing
-# convenience, never a failed installation.
-BOOKMARK_JSON="[{\"toplevel_name\":\"POS\"},{\"name\":\"POS Diagnose\",\"url\":\"http://127.0.0.1:${PORT}/\"}]"
-for policy_dir in /etc/chromium/policies/managed /etc/opt/chrome/policies/managed \
-                  /etc/chromium-browser/policies/managed; do
-  parent="$(dirname "$(dirname "${policy_dir}")")"
-  if [[ -d "${parent}" ]]; then
-    mkdir -p "${policy_dir}" 2>/dev/null || continue
-    printf '{"ManagedBookmarks": %s}\n' "${BOOKMARK_JSON}" \
-      >"${policy_dir}/kassio-diagnostics.json" 2>/dev/null || true
-    chmod 0644 "${policy_dir}/kassio-diagnostics.json" 2>/dev/null || true
-    say "  bookmark installed for ${policy_dir}"
-  fi
-done
-# Firefox shares a single policies.json, so an existing one is never touched.
-FIREFOX_POLICY=/etc/firefox/policies/policies.json
-if [[ -d /etc/firefox ]]; then
-  if [[ -e "${FIREFOX_POLICY}" ]]; then
-    say "  Firefox already has a policy file — leaving it untouched."
-    say "    Add the bookmark by hand if wanted: http://127.0.0.1:${PORT}/"
-  else
-    mkdir -p /etc/firefox/policies 2>/dev/null || true
-    cat >"${FIREFOX_POLICY}" <<EOF
-{"policies": {"Bookmarks": [{"Title": "POS Diagnose",
- "URL": "http://127.0.0.1:${PORT}/", "Placement": "toolbar"}]}}
-EOF
-    chmod 0644 "${FIREFOX_POLICY}" 2>/dev/null || true
-    say "  bookmark installed for Firefox"
+# Managed bookmark — only on request. Writing a browser policy changes every
+# profile on the machine, which is too much for an installer to decide on its
+# own. Without --bookmark nothing outside this tool's own paths is touched.
+#
+# Firefox is deliberately not supported here at all: it keeps a single shared
+# policies.json, so this tool would either overwrite settings it does not own or
+# leave a file behind that looks like the administrator put it there.
+if [[ "${WANT_BOOKMARK}" -eq 1 ]]; then
+  BOOKMARK_JSON="[{\"toplevel_name\":\"POS\"},{\"name\":\"POS Diagnose\",\"url\":\"http://127.0.0.1:${PORT}/\"}]"
+  installed_bookmark=0
+  for policy_dir in /etc/chromium/policies/managed /etc/opt/chrome/policies/managed \
+                    /etc/chromium-browser/policies/managed; do
+    parent="$(dirname "$(dirname "${policy_dir}")")"
+    if [[ -d "${parent}" ]]; then
+      mkdir -p "${policy_dir}" 2>/dev/null || continue
+      printf '{"ManagedBookmarks": %s}\n' "${BOOKMARK_JSON}" \
+        >"${policy_dir}/kassio-diagnostics.json" 2>/dev/null || true
+      chmod 0644 "${policy_dir}/kassio-diagnostics.json" 2>/dev/null || true
+      say "  bookmark installed for ${policy_dir}"
+      installed_bookmark=1
+    fi
+  done
+  if [[ "${installed_bookmark}" -eq 0 ]]; then
+    say "  no Chromium-family browser found — no bookmark installed."
   fi
 fi
 
