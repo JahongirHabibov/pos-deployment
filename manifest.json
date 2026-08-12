@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-12T12:04:51Z",
+  "updated_at": "2026-08-12T12:08:40Z",
   "services": {
     "backend": {
       "version": "v0.5.47",
@@ -60,14 +60,14 @@
       ]
     },
     "updater": {
-      "version": "v0.5.22",
-      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.22",
-      "digest": "sha256:65b0573415a927b1991589d48dd27a503f273f08d2ded28912fc06178420e5cb",
+      "version": "v0.5.23",
+      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.23",
+      "digest": "sha256:d29151bb25e59053ef2c9b9c7d6ea3ccb45a4baaaa546ce9b622a607cd45fc72",
       "date": "2026-08-12",
       "changes": [
         {
-          "type": "fix",
-          "text": "make the self-update prove it happened"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     }
