@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 
 from .. import runner
-from ..runner import CheckResult, check
+from ..runner import CheckResult, check, facts_of, yes_no
 
 MEMORY_WARN_PERCENT = 90
 DISK_WARN_PERCENT = 85
@@ -62,6 +62,14 @@ def system_os(context) -> CheckResult:
         params={"os": os_info.get("name", "?"), "kernel": data.get("kernel", "?"),
                 "days": days, "hours": hours},
         actual=str(os_info.get("name", "")),
+        facts=facts_of(
+            ("fact.hostname", data.get("hostname")),
+            ("fact.os", os_info.get("name")),
+            ("fact.kernel", data.get("kernel")),
+            ("fact.architecture", data.get("architecture")),
+            ("fact.cpu_cores", data.get("cpu_count")),
+            ("fact.uptime", f"{days} d {hours} h"),
+        ),
         data={"hostname": data.get("hostname", ""),
               "architecture": data.get("architecture", ""),
               "cpu_count": data.get("cpu_count")},
@@ -88,6 +96,12 @@ def system_memory(context) -> CheckResult:
         params={"percent": percent, "used": _human_bytes(memory.get("used")),
                 "total": _human_bytes(memory.get("total"))},
         actual=f"{percent} %",
+        facts=facts_of(
+            ("fact.memory_total", _human_bytes(memory.get("total"))),
+            ("fact.memory_used", _human_bytes(memory.get("used"))),
+            ("fact.memory_free", _human_bytes(memory.get("available"))),
+            ("fact.swap_total", _human_bytes(memory.get("swap_total"))),
+        ),
     )
 
 
@@ -171,6 +185,14 @@ def system_disk(context) -> list:
                     "free": _human_bytes(disk.get("free")),
                     "total": _human_bytes(disk.get("total"))},
             actual=f"{percent} %", actions=actions,
+            facts=facts_of(
+                ("fact.mountpoint", disk.get("mountpoint")),
+                ("fact.device", disk.get("device")),
+                ("fact.filesystem", disk.get("fstype")),
+                ("fact.disk_total", _human_bytes(disk.get("total"))),
+                ("fact.disk_used", _human_bytes(disk.get("used"))),
+                ("fact.disk_free", _human_bytes(disk.get("free"))),
+            ),
         ))
     return results or [CheckResult(id="system.disk", group="system",
                                    status=runner.UNKNOWN,
@@ -247,13 +269,26 @@ def system_time(context) -> CheckResult:
             id="system.time", group="system", status=runner.OK,
             title_key="check.system.time.title", message_key="check.system.time.synced",
             params={"timezone": timezone}, actual=timezone,
+            facts=facts_of(
+                ("fact.timezone", timezone),
+                ("fact.local_time", values.get("TimeUSec", "")),
+                ("fact.ntp_enabled", "", yes_no(ntp_enabled)),
+                ("fact.ntp_server", values.get("ServerName") or values.get("ServerAddress")),
+            ),
             data={"ntp": ntp_enabled})
     message = "check.system.time.not_synced" if ntp_enabled else "check.system.time.ntp_off"
     return CheckResult(
         id="system.time", group="system", status=runner.FAIL,
         title_key="check.system.time.title", message_key=message,
         params={"timezone": timezone}, actual=timezone,
-        actions=["system.sync_time"], data={"ntp": ntp_enabled})
+        actions=["system.sync_time"],
+        facts=facts_of(
+            ("fact.timezone", timezone),
+            ("fact.local_time", values.get("TimeUSec", "")),
+            ("fact.ntp_enabled", "", yes_no(ntp_enabled)),
+            ("fact.ntp_synchronised", "", yes_no(synchronised)),
+        ),
+        data={"ntp": ntp_enabled})
 
 
 @check("system", "system.boot_mode", "check.system.boot_mode.title")
@@ -272,7 +307,12 @@ def system_boot_mode(context) -> CheckResult:
         message_key="check.system.boot_mode.uefi" if mode == "uefi"
         else "check.system.boot_mode.legacy",
         params={"secure_boot": "on" if secure_boot else "off"},
-        actual=mode, data={"secure_boot": secure_boot})
+        actual=mode,
+        facts=facts_of(
+            ("fact.boot_mode", mode.upper()),
+            ("fact.secure_boot", "", yes_no(secure_boot)),
+        ),
+        data={"secure_boot": secure_boot})
 
 
 @check("system", "system.machine_id", "check.system.machine_id.title")
@@ -294,20 +334,24 @@ def system_machine_id(context) -> CheckResult:
         return CheckResult(
             id="system.machine_id", group="system", status=runner.OK,
             title_key="check.system.machine_id.title",
-            message_key="check.system.machine_id.not_recorded", actual=current[:23])
+            message_key="check.system.machine_id.not_recorded", actual=current[:23],
+            facts=facts_of(("fact.machine_id", current)))
     if expected == current:
         return CheckResult(
             id="system.machine_id", group="system", status=runner.OK,
             title_key="check.system.machine_id.title",
             message_key="check.system.machine_id.stable", actual=current[:23],
-            expected=expected[:23])
+            expected=expected[:23],
+            facts=facts_of(("fact.machine_id", current)))
     # The licence is bound to this identifier, so a change breaks the POS in a
     # way whose cause is otherwise very hard to see.
     return CheckResult(
         id="system.machine_id", group="system", status=runner.FAIL,
         title_key="check.system.machine_id.title",
         message_key="check.system.machine_id.changed",
-        actual=current[:23], expected=expected[:23])
+        actual=current[:23], expected=expected[:23],
+        facts=facts_of(("fact.machine_id", current),
+                       ("fact.machine_id_expected", expected)))
 
 
 @check("system", "system.boots", "check.system.boots.title")
@@ -325,5 +369,9 @@ def system_boots(context) -> CheckResult:
         id="system.boots", group="system", status=runner.OK,
         title_key="check.system.boots.title", message_key="check.system.boots.message",
         params={"count": len(boots)},
+        facts=facts_of(
+            ("fact.boot_count", len(boots)),
+            ("fact.last_boot", boots[-1].get("raw", "") if boots else ""),
+        ),
         data={"boots": [entry.get("raw", "") for entry in boots[-10:]],
               "persistent_journal": data.get("persistent_journal")})

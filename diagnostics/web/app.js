@@ -92,6 +92,34 @@
     node.dataset.timer = window.setTimeout(function () { node.hidden = true; }, 6000);
   }
 
+  function showFailure(messageKey, params, details) {
+    // A toast cannot hold technical detail, and the messages promise it. When
+    // there is something to show, this dialog is where it lives — with a copy
+    // button, because the next step is almost always sending it to support.
+    var body = [el("p", { text: t(messageKey, params || {}) })];
+    if (details) {
+      body.push(el("details", { class: "details", open: "open" }, [
+        el("summary", { text: t("ui.btn.details") }),
+        el("pre", { text: details })
+      ]));
+    }
+    var buttons = [];
+    if (details) {
+      buttons.push(el("button", {
+        class: "button", text: t("ui.btn.copy"),
+        onclick: function () { copyText(t(messageKey, params || {}) + "\n\n" + details); }
+      }));
+    }
+    buttons.push(el("button", { class: "button button-primary", text: t("ui.btn.close"),
+                                onclick: closeDialog }));
+    openDialog(t("ui.error.title"), body, buttons);
+  }
+
+  function errorDetail(payload) {
+    if (payload && payload.error && payload.error.detail) { return payload.error.detail; }
+    return "";
+  }
+
   function errorText(payload) {
     if (payload && payload.error && payload.error.key) {
       return t(payload.error.key, payload.error.params || {});
@@ -319,11 +347,16 @@
             if (actionId === "devices.scan" && !(options && options.quiet)) {
               showScanResults(data.data || {});
             }
+          } else if (data.message_key === "pos.multiple_printer_settings") {
+            chooseSetting(data.data || {}, params);
           } else {
-            toast(t(data.message_key || "", data.params || {}) || errorText(response.payload),
-                  "fail");
-            if (data.message_key === "pos.multiple_printer_settings") {
-              chooseSetting(data.data || {}, params);
+            var message = data.message_key || (response.payload.error
+                          && response.payload.error.key) || "error.command_failed";
+            var detail = data.details || errorDetail(response.payload);
+            if (detail) {
+              showFailure(message, data.params || {}, detail);
+            } else {
+              toast(t(message, data.params || {}), "fail");
             }
           }
           return data;
@@ -443,7 +476,13 @@
       el("p", { class: "card-message", text: t(result.message_key, result.params || {}) })
     ];
 
-    if (result.actual || result.expected) {
+    if (result.facts && result.facts.length) {
+      body.push(el("dl", { class: "facts" }, result.facts.reduce(function (nodes, entry) {
+        nodes.push(el("dt", { text: t(entry.label_key) }));
+        nodes.push(el("dd", { text: entry.value_key ? t(entry.value_key) : entry.value }));
+        return nodes;
+      }, [])));
+    } else if (result.actual || result.expected) {
       body.push(el("div", { class: "card-values" }, [
         result.actual ? el("div", { text: t("ui.actual") + ": " + result.actual }) : null,
         result.expected ? el("div", { text: t("ui.expected") + ": " + result.expected }) : null
@@ -584,11 +623,56 @@
       if (!groupResults.length) { return; }
       panel.appendChild(el("h2", { text: t("ui.group." + group) }));
       panel.appendChild(el("div", { class: "cards" }, groupResults.map(resultCard)));
+      appendCollectedTables(panel, group);
     });
     panel.appendChild(el("div", { class: "card-actions" }, [
       el("button", { class: "button", text: t("ui.btn.recheck"),
                      onclick: function () { refresh(groups); } })
     ]));
+  }
+
+  function dataTable(titleKey, headers, rows) {
+    if (!rows.length) { return null; }
+    return el("div", { class: "section" }, [
+      el("h3", { text: t(titleKey) }),
+      el("div", { class: "table-wrap" }, [
+        el("table", { class: "table" }, [
+          el("thead", {}, [el("tr", {}, headers.map(function (key) {
+            return el("th", { text: t(key) });
+          }))]),
+          el("tbody", {}, rows.map(function (row) {
+            return el("tr", {}, row.map(function (cell) {
+              return el("td", { text: cell === null || cell === undefined ? "" : String(cell) });
+            }));
+          }))
+        ])
+      ])
+    ]);
+  }
+
+  function resultById(id) {
+    for (var index = 0; index < state.results.length; index += 1) {
+      if (state.results[index].id === id) { return state.results[index]; }
+    }
+    return null;
+  }
+
+  function appendCollectedTables(panel, group) {
+    if (group === "network") {
+      var neighbours = resultById("network.neighbours");
+      var entries = (neighbours && neighbours.data && neighbours.data.entries) || [];
+      var table = dataTable("ui.table.neighbours",
+        ["ui.table.ip", "ui.table.mac", "ui.table.state"],
+        entries.map(function (entry) { return [entry.ip, entry.mac, entry.state]; }));
+      if (table) { panel.appendChild(table); }
+    }
+    if (group === "devices") {
+      var usb = resultById("devices.usb");
+      var devices = (usb && usb.data && usb.data.devices) || [];
+      var usbTable = dataTable("ui.table.usb", ["ui.table.description"],
+        devices.map(function (entry) { return [entry.description]; }));
+      if (usbTable) { panel.appendChild(usbTable); }
+    }
   }
 
   function renderOverview() {
@@ -606,12 +690,7 @@
       ]);
     }
 
-    function find(id) {
-      for (var index = 0; index < state.results.length; index += 1) {
-        if (state.results[index].id === id) { return state.results[index]; }
-      }
-      return null;
-    }
+    var find = resultById;
 
     var deviceResults = resultsOf(["devices"]).filter(function (r) {
       return r.id.indexOf("devices.device:") === 0;
@@ -954,7 +1033,15 @@
         loadConfig();
         refresh();
       } else {
-        toast(errorText(response.payload), "fail");
+        var detail = errorDetail(response.payload);
+        if (detail) {
+          showFailure((response.payload.error && response.payload.error.key)
+                      || "error.command_failed",
+                      (response.payload.error && response.payload.error.params) || {},
+                      detail);
+        } else {
+          toast(errorText(response.payload), "fail");
+        }
       }
     }).catch(function () { toast(t("ui.request_failed"), "fail"); });
   }
@@ -979,8 +1066,22 @@
     });
   }
 
+  function tabFromHash() {
+    var wanted = (window.location.hash || "").replace(/^#/, "");
+    for (var index = 0; index < TABS.length; index += 1) {
+      if (TABS[index].id === wanted) { return wanted; }
+    }
+    return "";
+  }
+
   function selectTab(tabId) {
     state.activeTab = tabId;
+    // Reflected in the address so support can point straight at an area:
+    // "open localhost:9120/#devices".
+    if (window.location.hash !== "#" + tabId) {
+      try { window.history.replaceState(null, "", "#" + tabId); }
+      catch (error) { /* file:// and older browsers simply keep the hash */ }
+    }
     TABS.forEach(function (tab) {
       document.getElementById("panel-" + tab.id).hidden = tab.id !== tabId;
     });
@@ -1136,6 +1237,10 @@
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape") { closeDialog(); }
     });
+    window.addEventListener("hashchange", function () {
+      var wanted = tabFromHash();
+      if (wanted && wanted !== state.activeTab) { selectTab(wanted); }
+    });
 
     api("GET", "/api/meta").then(function (response) {
       state.meta = response.payload.data || { actions: [], groups: [] };
@@ -1144,7 +1249,7 @@
       catch (error) { stored = null; }
       return setLanguage(stored || state.meta.default_language || "de");
     }).then(function () {
-      selectTab("overview");
+      selectTab(tabFromHash() || "overview");
       return refresh();
     }).then(function () {
       if (state.meta && state.meta.config_present === false) {

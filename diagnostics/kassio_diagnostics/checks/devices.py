@@ -25,7 +25,7 @@ from __future__ import annotations
 import ipaddress
 
 from .. import netscan, runner, vendors
-from ..runner import CheckResult, check
+from ..runner import CheckResult, check, facts_of
 from . import network as network_checks
 
 PROBE_TIMEOUT_SECONDS = 1.0
@@ -102,6 +102,21 @@ def _check_device(device: dict, neighbours: list) -> CheckResult:
     check_id = f"devices.device:{identifier}"
     title_key = "check.devices.device.title"
 
+    def device_facts(found_ip: str = "", observed: str = "") -> list:
+        vendor_label = vendors.resolve(device, observed or expected_mac)["label"]
+        return facts_of(
+            ("fact.device_name", name),
+            ("fact.device_role", str(device.get("role", ""))),
+            ("fact.ip_expected", expected_ip),
+            ("fact.ip_found", found_ip),
+            ("fact.mac_expected", expected_mac),
+            ("fact.mac_observed", observed),
+            ("fact.port", port),
+            ("fact.vendor", vendor_label),
+            ("fact.model", str(device.get("model", ""))),
+            ("fact.note", str(device.get("notes", ""))),
+        )
+
     if not expected_ip:
         return CheckResult(
             id=check_id, group="devices", status=runner.UNKNOWN, title_key=title_key,
@@ -133,13 +148,15 @@ def _check_device(device: dict, neighbours: list) -> CheckResult:
                         "expected_mac": expected_mac, "found_mac": observed_mac},
                 actual=f"{expected_ip} ({observed_mac})",
                 expected=f"{expected_ip} ({expected_mac})",
-                actions=["printer.open_web_ui", "printer.test_print"], data=data)
+                actions=["printer.open_web_ui", "printer.test_print"],
+                facts=device_facts(found_ip, observed_mac), data=data)
         return CheckResult(
             id=check_id, group="devices", status=runner.OK, title_key=title_key,
             message_key="check.devices.reachable",
             params={"device": name, "ip": expected_ip, "port": port},
             actual=expected_ip, expected=expected_ip,
-            actions=["printer.test_print", "printer.open_web_ui"], data=base_data)
+            actions=["printer.test_print", "printer.open_web_ui"],
+            facts=device_facts(expected_ip, observed_mac), data=base_data)
 
     # Not at the recorded address. Try to prove where it went.
     found_ip = _find_by_mac(neighbours, expected_mac) if expected_mac else ""
@@ -157,14 +174,15 @@ def _check_device(device: dict, neighbours: list) -> CheckResult:
             actual=found_ip, expected=expected_ip,
             actions=["printer.adopt_found_ip", "printer.open_web_ui",
                      "printer.show_instructions"],
-            data=data)
+            facts=device_facts(found_ip), data=data)
 
     return CheckResult(
         id=check_id, group="devices", status=runner.FAIL, title_key=title_key,
         message_key="check.devices.unreachable",
         params={"device": name, "ip": expected_ip, "port": port},
         actual="", expected=expected_ip,
-        actions=["devices.scan", "printer.show_instructions"], data=base_data)
+        actions=["devices.scan", "printer.show_instructions"],
+        facts=device_facts(), data=base_data)
 
 
 @check("devices", "devices.usb", "check.devices.usb.title")
@@ -183,4 +201,6 @@ def devices_usb(context) -> CheckResult:
         id="devices.usb", group="devices", status=runner.OK,
         title_key="check.devices.usb.title", message_key="check.devices.usb.message",
         params={"count": len(devices), "printers": len(nodes)},
+        facts=facts_of(("fact.usb_count", len(devices)),
+                       ("fact.printer_nodes", ", ".join(nodes) if nodes else "")),
         data={"devices": devices[:60], "printer_nodes": nodes})

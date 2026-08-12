@@ -29,6 +29,42 @@ LOG = logging.getLogger("kassio.runner")
 
 OK, WARN, FAIL, UNKNOWN, UNAVAILABLE = "ok", "warn", "fail", "unknown", "unavailable"
 
+
+def fact(label_key: str, value=None, value_key: str = "") -> dict:
+    """One labelled value for the card.
+
+    A value is either raw text — an address, a version, a size, which must not
+    be translated — or a locale key for the cases where it is a word rather
+    than data, such as yes and no. Mixing the two would leave half the
+    interface in German on a Russian screen.
+    """
+    return {"label_key": label_key, "value_key": value_key,
+            "value": "" if value is None else str(value)}
+
+
+def facts_of(*entries) -> list:
+    """Build a fact list, dropping anything with no value to show.
+
+    Each entry is (label_key, value) or (label_key, value, value_key). An empty
+    row reads as missing data, so it is left out instead.
+    """
+    result = []
+    for entry in entries:
+        label, value = entry[0], entry[1]
+        value_key = entry[2] if len(entry) > 2 else ""
+        if value_key:
+            result.append(fact(label, "", value_key))
+        elif value not in (None, "", [], {}):
+            result.append(fact(label, value))
+    return result
+
+
+def yes_no(flag) -> str:
+    """Locale key for a boolean shown to the customer."""
+    if flag is None:
+        return "fact.value.unknown"
+    return "fact.value.yes" if flag else "fact.value.no"
+
 CHECK_TIMEOUT_SECONDS = 45
 MAX_PARALLEL_CHECKS = 8
 
@@ -46,6 +82,10 @@ class CheckResult:
     actions: list = field(default_factory=list)
     details: str = ""
     data: dict = field(default_factory=dict)
+    # Concrete values worth putting in front of the customer: a status word
+    # alone is not something anyone can read out to support. Each entry is a
+    # localisable label plus an already-formatted value.
+    facts: list = field(default_factory=list)
     duration_ms: int = 0
 
     def as_dict(self) -> dict:
@@ -54,7 +94,7 @@ class CheckResult:
             "title_key": self.title_key, "message_key": self.message_key,
             "params": self.params, "actual": self.actual, "expected": self.expected,
             "actions": self.actions, "details": self.details, "data": self.data,
-            "duration_ms": self.duration_ms,
+            "facts": self.facts, "duration_ms": self.duration_ms,
         }
 
 

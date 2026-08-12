@@ -186,8 +186,13 @@ class Handler(BaseHTTPRequestHandler):
     def _ok(self, data, status: int = 200) -> None:
         self._json({"ok": True, "data": data}, status)
 
-    def _error(self, key: str, status: int = 400, **params) -> None:
-        self._json({"ok": False, "error": {"key": key, "params": params}}, status)
+    def _error(self, key: str, status: int = 400, detail: str = "", **params) -> None:
+        # detail is a sibling of the key, not a placeholder: it is raw technical
+        # text that no translation should try to render, and the interface shows
+        # it behind "technical details" rather than in the sentence itself.
+        self._json({"ok": False,
+                    "error": {"key": key, "params": params, "detail": detail[:4000]}},
+                   status)
 
     def _drain_body(self) -> None:
         """Read the request body up front, before any decision to reject.
@@ -478,8 +483,12 @@ class Handler(BaseHTTPRequestHandler):
                                           stdin_data=serialised)
         AUDIT.info("write-config ok=%s", outcome.ok)
         if not outcome.ok:
+            # Logged in full: "it failed" without a reason is what turns a
+            # one-line fix into a support call.
+            LOG.error("saving the configuration failed: %s — %s",
+                      outcome.error_key, outcome.detail)
             self._error(outcome.error_key or "error.command_failed", 500,
-                        detail=outcome.detail[:200])
+                        detail=outcome.detail)
             return
         self.app.invalidate()
         self._ok({"written": True, "findings": [f.as_dict() for f in findings],
@@ -589,6 +598,9 @@ class Handler(BaseHTTPRequestHandler):
         AUDIT.info("action %s ok=%s params=%s duration=%.1fs", action_id,
                    getattr(result, "ok", False), sorted(params),
                    time.monotonic() - started)
+        if not result.ok:
+            LOG.error("action %s failed: %s — %s", action_id, result.message_key,
+                      result.details)
 
         payload = result.as_dict()
         if result.ok and result.recheck_groups:

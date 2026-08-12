@@ -204,6 +204,7 @@ Härtung der Unit, analog zum Power-Agent und darüber hinaus:
 # NoNewPrivileges bewusst NICHT gesetzt — Begründung siehe unten.
 PrivateTmp=yes
 ProtectSystem=full
+ReadWritePaths=-/etc/kassio-diagnostics
 ProtectHome=read-only
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
@@ -239,9 +240,11 @@ funktionsunfähig machen würde:
   Schutz wird stattdessen von der Verb-Tabelle im root-eigenen Helper getragen, die kein
   frei wählbares Kommando zulässt. Aus demselben Grund funktioniert auch `ping`, das seine
   Rohsocket-Rechte über Datei-Capabilities bezieht.
-* **`ProtectSystem=full` statt `strict`.** `strict` macht `/etc` schreibgeschützt — auch
-  für den über sudo gestarteten root-Kindprozess, da dieser den Namensraum der Unit erbt.
-  Das Schreiben von `expected-config.json` wäre unmöglich.
+* **`ProtectSystem=full` plus `ReadWritePaths`.** Sowohl `full` als auch `strict` mounten
+  `/etc` schreibgeschützt — auch für den über sudo gestarteten root-Kindprozess, da dieser
+  den Namensraum der Unit erbt. Ohne die Ausnahme scheitert jedes Speichern der
+  Sollkonfiguration mit „read-only file system". `ReadWritePaths` öffnet ausschließlich
+  `/etc/kassio-diagnostics`; der Rest von `/etc` bleibt geschützt.
 * **`SocketBindAllow`/`SocketBindDeny` statt `IPAddressDeny=any`.** Die IP-Filter des
   Power-Agents wirken auf **alle** Sockets der Unit und würden Subnetzscan,
   Drucker-Erreichbarkeitsprüfung, POS-API-Zugriff und Internetprüfung blockieren. Die

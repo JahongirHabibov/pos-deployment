@@ -15,7 +15,7 @@ from __future__ import annotations
 import ipaddress
 
 from .. import netscan, runner
-from ..runner import CheckResult, check
+from ..runner import CheckResult, check, facts_of, yes_no
 
 INTERNET_PROBES = (("1.1.1.1", 443), ("8.8.8.8", 53))
 DNS_PROBE_NAME = "ghcr.io"
@@ -118,6 +118,11 @@ def network_interface(context) -> CheckResult:
         actual=interface["ifname"],
         expected=configured,
         actions=[] if up else ["network.restart_network"],
+        facts=facts_of(
+            ("fact.interface", interface["ifname"]),
+            ("fact.link_state", interface["operstate"]),
+            ("fact.address", interface.get("address")),
+        ),
         data=interface)
 
 
@@ -174,7 +179,13 @@ def network_address(context) -> CheckResult:
         title_key="check.network.address.title",
         message_key="check.network.address.message",
         params={"address": address, "prefix": interface.get("prefixlen", "")},
-        actual=address, expected=expected_subnet)
+        actual=address, expected=expected_subnet,
+        facts=facts_of(
+            ("fact.address", f"{address}/{interface.get('prefixlen', '')}"),
+            ("fact.subnet_expected", expected_subnet),
+            ("fact.addressing", "", "fact.value.dhcp" if dynamic
+             else "fact.value.static"),
+        ))
 
 
 @check("network", "network.gateway", "check.network.gateway.title")
@@ -200,19 +211,27 @@ def network_gateway(context) -> CheckResult:
             title_key="check.network.gateway.title",
             message_key="check.network.gateway.unexpected",
             params={"gateway": gateway, "expected": expected},
-            actual=gateway, expected=expected)
+            actual=gateway, expected=expected,
+            facts=facts_of(("fact.gateway", gateway),
+                           ("fact.gateway_expected", expected)))
     if not reachable:
         return CheckResult(
             id="network.gateway", group="network", status=runner.FAIL,
             title_key="check.network.gateway.title",
             message_key="check.network.gateway.unreachable",
             params={"gateway": gateway}, actual=gateway, expected=expected,
-            actions=["network.restart_network"])
+            actions=["network.restart_network"],
+            facts=facts_of(("fact.gateway", gateway),
+                           ("fact.gateway_expected", expected),
+                           ("fact.reachable", "", yes_no(False))))
     return CheckResult(
         id="network.gateway", group="network", status=runner.OK,
         title_key="check.network.gateway.title",
         message_key="check.network.gateway.message",
-        params={"gateway": gateway}, actual=gateway, expected=expected)
+        params={"gateway": gateway}, actual=gateway, expected=expected,
+        facts=facts_of(("fact.gateway", gateway),
+                       ("fact.gateway_expected", expected),
+                       ("fact.reachable", "", yes_no(True))))
 
 
 def resolve_name(name: str) -> bool:
@@ -239,12 +258,14 @@ def network_dns(context) -> CheckResult:
             id="network.dns", group="network", status=runner.OK,
             title_key="check.network.dns.title", message_key="check.network.dns.message",
             params={"name": DNS_PROBE_NAME},
+            facts=facts_of(("fact.nameservers", ", ".join(nameservers or []))),
             data={"nameservers": nameservers})
     # Not fatal: the POS itself runs entirely locally. It only blocks updates.
     return CheckResult(
         id="network.dns", group="network", status=runner.WARN,
         title_key="check.network.dns.title", message_key="check.network.dns.failed",
         params={"name": DNS_PROBE_NAME}, actions=["network.flush_dns"],
+        facts=facts_of(("fact.nameservers", ", ".join(nameservers or []))),
         data={"nameservers": nameservers})
 
 
@@ -273,4 +294,6 @@ def network_neighbours(context) -> CheckResult:
         id="network.neighbours", group="network", status=runner.OK,
         title_key="check.network.neighbours.title",
         message_key="check.network.neighbours.message",
-        params={"count": len(entries)}, data={"entries": entries[:100]})
+        params={"count": len(entries)},
+        facts=facts_of(("fact.neighbour_count", len(entries))),
+        data={"entries": entries[:100]})

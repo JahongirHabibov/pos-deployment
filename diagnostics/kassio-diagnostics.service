@@ -23,10 +23,14 @@ RestartSec=2
 # The security boundary is the fixed verb table in the root-owned helper, which
 # accepts no caller-supplied command or path.
 PrivateTmp=yes
-# "full" rather than "strict": strict mounts /etc read-only for the whole unit,
-# including the root child started through sudo, which would make writing
-# expected-config.json impossible.
+# "full" mounts /usr, /boot AND /etc read-only for the whole unit, including the
+# root child started through sudo. ReadWritePaths punches a hole for this tool's
+# own directory and nothing else: without it every attempt to save the site
+# configuration fails with "read-only file system", and the customer sees a
+# command that simply refuses to work.
+# The leading "-" keeps the unit startable if the directory is not there yet.
 ProtectSystem=full
+ReadWritePaths=-/etc/kassio-diagnostics
 # read-only rather than yes: the deployment directory with .env may live under
 # the admin user's home and has to stay readable.
 ProtectHome=read-only

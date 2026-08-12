@@ -21,7 +21,7 @@ import time
 
 from .. import deployment, runner
 from ..config import expected_containers
-from ..runner import CheckResult, check
+from ..runner import CheckResult, check, facts_of
 
 BACKUP_WARN_AGE_HOURS = 48
 RESTART_WARN_COUNT = 5
@@ -86,6 +86,14 @@ def docker_containers(context) -> list:
         payload = {"container": name, "image": entry.get("image", ""),
                    "status": entry.get("status", ""), "state": state,
                    "health": health, "restart_count": restarts}
+        container_facts = facts_of(
+            ("fact.container", name),
+            ("fact.image", entry.get("image", "")),
+            ("fact.state", state or "?"),
+            ("fact.health", health or "-"),
+            ("fact.restart_count", restarts),
+            ("fact.status_text", entry.get("status", "")),
+        )
 
         if state != "running":
             results.append(CheckResult(
@@ -94,7 +102,8 @@ def docker_containers(context) -> list:
                 message_key="check.docker.container.not_running",
                 params={"container": name, "state": state or "?"},
                 actual=state, expected="running",
-                actions=["container.restart"], data=payload))
+                actions=["container.restart"], facts=container_facts,
+                data=payload))
             continue
         if health == "unhealthy":
             results.append(CheckResult(
@@ -102,7 +111,8 @@ def docker_containers(context) -> list:
                 title_key="check.docker.container.title",
                 message_key="check.docker.container.unhealthy",
                 params={"container": name}, actual=str(health), expected="healthy",
-                actions=["container.restart"], data=payload))
+                actions=["container.restart"], facts=container_facts,
+                data=payload))
             continue
         if isinstance(restarts, int) and restarts >= RESTART_WARN_COUNT:
             results.append(CheckResult(
@@ -110,7 +120,8 @@ def docker_containers(context) -> list:
                 title_key="check.docker.container.title",
                 message_key="check.docker.container.restarting",
                 params={"container": name, "count": restarts},
-                actual=str(restarts), actions=["container.restart"], data=payload))
+                actual=str(restarts), actions=["container.restart"],
+                facts=container_facts, data=payload))
             continue
         results.append(CheckResult(
             id=f"docker.container:{name}", group="docker", status=runner.OK,
@@ -118,7 +129,8 @@ def docker_containers(context) -> list:
             message_key="check.docker.container.running",
             params={"container": name, "health": health or "-"},
             actual=state, expected="running",
-            actions=["container.restart"], data=payload))
+            actions=["container.restart"], facts=container_facts,
+            data=payload))
 
     unexpected = [name for name in present if name not in expected]
     if unexpected:
@@ -157,6 +169,16 @@ def docker_updater(context) -> list:
             message_key="check.docker.updater.message",
             params={"version": str(state.get("current_version") or "?")},
             actual=str(state.get("current_version") or ""),
+            facts=facts_of(
+                ("fact.version_current", state.get("current_version")),
+                ("fact.version_previous", state.get("previous_version")),
+                ("fact.last_check", state.get("last_check")),
+                ("fact.download_status", (state.get("download") or {}).get("status")),
+            ) + [
+                {"label_key": "fact.service_version", "value_key": "",
+                 "value": f"{service}: {info.get('current', '?')}"}
+                for service, info in sorted((state.get("services") or {}).items())
+            ],
             data={"services": state.get("services") or {},
                   "download": state.get("download") or {}}))
 
@@ -187,4 +209,10 @@ def docker_backup(context) -> CheckResult:
         message_key="check.docker.backup.stale" if status == runner.WARN
         else "check.docker.backup.message",
         params={"hours": int(age_hours), "name": newest["name"]},
-        actual=newest["name"], data=newest)
+        actual=newest["name"],
+        facts=facts_of(
+            ("fact.backup_file", newest["name"]),
+            ("fact.backup_age_hours", int(age_hours)),
+            ("fact.backup_size", f"{newest['size'] / (1024 * 1024):.1f} MB"),
+        ),
+        data=newest)

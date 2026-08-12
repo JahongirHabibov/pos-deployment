@@ -177,6 +177,16 @@ textarea { min-height: 80px; }
 .card-message { margin: 10px 0 0; }
 .card-values { margin: 10px 0 0; font-size: 15px; color: var(--text-muted); display: grid; gap: 2px; }
 .card-values code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.facts {
+  display: grid; grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: 4px 14px; margin: 12px 0 0; font-size: 15px;
+}
+.facts dt { color: var(--text-muted); }
+.facts dd {
+  margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px; word-break: break-word;
+}
+
 .card-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
 
 .chip {
