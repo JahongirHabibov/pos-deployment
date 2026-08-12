@@ -8,6 +8,7 @@
   "action.devices.scan.label": "Search the network",
   "action.devices.scan.no_subnet": "The network to search could not be determined. Please enter a network in the technician setup.",
   "action.devices.scan.rate_limited": "The search is already running or has just run. Please wait {seconds} seconds.",
+  "action.devices.scan.subnet_too_large": "The network {subnet} is too large to search (more than {limit} addresses). Please enter the smaller network the printers actually sit on in the technician setup — usually a /24, for example 192.168.1.0/24.",
   "action.network.flush_dns.confirm": "The name resolution cache will be cleared. Continue?",
   "action.network.flush_dns.done": "The name cache was cleared.",
   "action.network.flush_dns.label": "Clear name cache",

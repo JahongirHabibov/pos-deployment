@@ -92,3 +92,32 @@ def test_ping_only_reachability_is_reported(monkeypatch):
     monkeypatch.setattr(netscan, "ping", lambda host, timeout=1: True)
     result = netscan.probe_device("192.168.1.50", 9100)
     assert result["reachable"] is True and result["tcp"] is False
+
+
+def test_an_oversized_subnet_is_recognised():
+    # A /19 is 8192 addresses — sweeping it is a load test, not a diagnosis.
+    assert netscan.too_large_to_scan("10.64.0.0/19") is True
+    assert netscan.too_large_to_scan("192.168.1.0/24") is False
+    assert netscan.too_large_to_scan("10.0.0.0/22") is False
+
+
+def test_nonsense_is_not_reported_as_oversized():
+    # Invalid input is a different fault and must not be masked as "too large".
+    assert netscan.too_large_to_scan("not a subnet") is False
+    assert netscan.too_large_to_scan("") is False
+
+
+def test_the_scan_action_refuses_an_oversized_subnet_with_a_reason():
+    from kassio_diagnostics.actions import ActionContext
+    from kassio_diagnostics.actions.printer import scan_network
+
+    class NoPrivileged:
+        def read(self, verb, *args, timeout=40):
+            raise AssertionError("an oversized subnet must be refused before probing")
+
+    context = ActionContext(privileged=NoPrivileged(), scan_limiter=None,
+                            config={"network": {"subnet": "10.64.0.0/19"}})
+    result = scan_network(context, {})
+    assert result.ok is False
+    assert result.message_key == "action.devices.scan.subnet_too_large"
+    assert result.params["subnet"] == "10.64.0.0/19"

@@ -8,6 +8,7 @@
   "action.devices.scan.label": "Netzwerk durchsuchen",
   "action.devices.scan.no_subnet": "Das zu durchsuchende Netz konnte nicht ermittelt werden. Bitte im Techniker-Setup ein Netz eintragen.",
   "action.devices.scan.rate_limited": "Die Suche läuft bereits oder wurde gerade ausgeführt. Bitte {seconds} Sekunden warten.",
+  "action.devices.scan.subnet_too_large": "Das Netz {subnet} ist zu groß, um es zu durchsuchen (mehr als {limit} Adressen). Bitte im Techniker-Setup das kleinere Netz eintragen, in dem die Drucker wirklich hängen — meist ein /24, zum Beispiel 192.168.1.0/24.",
   "action.network.flush_dns.confirm": "Der Zwischenspeicher für Namensauflösung wird geleert. Fortfahren?",
   "action.network.flush_dns.done": "Der Namensspeicher wurde geleert.",
   "action.network.flush_dns.label": "Namensspeicher leeren",

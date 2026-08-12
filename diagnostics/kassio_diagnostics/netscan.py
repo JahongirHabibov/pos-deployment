@@ -29,6 +29,9 @@ from concurrent.futures import ThreadPoolExecutor
 DEFAULT_PORTS = (9100, 631, 80)
 MAX_HOSTS = 256
 MAX_WORKERS = 64
+# A /22 is already 1024 addresses; beyond this a sweep stops being a diagnostic
+# step and becomes a load test on the customer's network.
+MAX_SCANNABLE_ADDRESSES = 4096
 PROBE_TIMEOUT = 0.3
 
 SCAN_MIN_INTERVAL_SECONDS = 30
@@ -71,12 +74,23 @@ def probe_device(host: str, port: int, timeout: float = 1.0) -> dict:
     }
 
 
+def too_large_to_scan(subnet: str) -> bool:
+    """True when a subnet is too big to sweep. Callers must say so explicitly:
+    returning an empty result would read as "no printers here", which is a very
+    different statement from "this network was never searched"."""
+    try:
+        return ipaddress.ip_network(subnet, strict=False).num_addresses \
+            > MAX_SCANNABLE_ADDRESSES
+    except (ValueError, TypeError):
+        return False
+
+
 def hosts_of(subnet: str, limit: int = MAX_HOSTS) -> list:
     try:
         network = ipaddress.ip_network(subnet, strict=False)
     except (ValueError, TypeError):
         return []
-    if network.num_addresses > 4096:
+    if network.num_addresses > MAX_SCANNABLE_ADDRESSES:
         return []
     return [str(host) for host in list(network.hosts())[:limit]]
 

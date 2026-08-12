@@ -8,6 +8,7 @@
   "action.devices.scan.label": "Поиск по сети",
   "action.devices.scan.no_subnet": "Не удалось определить сеть для поиска. Укажите сеть в настройке техника.",
   "action.devices.scan.rate_limited": "Поиск уже выполняется или только что завершился. Подождите {seconds} с.",
+  "action.devices.scan.subnet_too_large": "Сеть {subnet} слишком велика для поиска (более {limit} адресов). Укажите в настройке техника меньшую сеть, в которой действительно находятся принтеры — обычно /24, например 192.168.1.0/24.",
   "action.network.flush_dns.confirm": "Кэш разрешения имён будет очищен. Продолжить?",
   "action.network.flush_dns.done": "Кэш имён очищен.",
   "action.network.flush_dns.label": "Очистить кэш имён",

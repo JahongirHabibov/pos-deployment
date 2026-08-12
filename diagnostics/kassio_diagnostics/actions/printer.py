@@ -89,6 +89,13 @@ def adopt_found_ip(context, params: dict) -> ActionResult:
                         recheck_groups=["devices"])
 
 
+def _refuse_oversized(subnet: str) -> ActionResult:
+    """Say the network was never searched, rather than returning an empty
+    result that reads as "there are no printers here"."""
+    return ActionResult(False, "action.devices.scan.subnet_too_large",
+                        {"subnet": subnet, "limit": netscan.MAX_SCANNABLE_ADDRESSES})
+
+
 @action("devices.scan", risk=RISK_LOW)
 def scan_network(context, params: dict) -> ActionResult:
     """Sweep the local subnet for printer-ish ports and match against the config."""
@@ -106,6 +113,11 @@ def scan_network(context, params: dict) -> ActionResult:
         subnet = str((params or {}).get("subnet", "")).strip()
         if not subnet and isinstance(context.config, dict):
             subnet = str((context.config.get("network") or {}).get("subnet", "")).strip()
+
+        # Checked before anything else is read: when the answer is already
+        # known there is no reason to touch the system at all.
+        if subnet and netscan.too_large_to_scan(subnet):
+            return _refuse_oversized(subnet)
 
         network_outcome = context.privileged.read("network")
         network_data = network_outcome.data if network_outcome.ok else {}
@@ -127,6 +139,10 @@ def scan_network(context, params: dict) -> ActionResult:
                     subnet = ""
         if not subnet:
             return ActionResult(False, "action.devices.scan.no_subnet")
+        # Repeated for the subnet just derived from the interface, which has
+        # not been through the check above.
+        if netscan.too_large_to_scan(subnet):
+            return _refuse_oversized(subnet)
 
         found = netscan.scan(subnet)
         by_ip = {entry["ip"]: entry for entry in found}
