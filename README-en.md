@@ -88,6 +88,7 @@ Notes:
 | Sudo Password (conditional) | Only shown if no sudo password is already available from Step 2 / state. Required to run final Docker operations. |
 | Show password (checkbox) | Visibility toggle only. |
 | Install kiosk power agent (checkbox) | Installs `kiosk-agent/` as a systemd service on this machine so the POS login screen can shut it down. Off by default; the choice is stored as `POS_KIOSK_AGENT` in `.env` and pre-filled on the next run. Hidden in WSL 2 mode. See "Kiosk Power Agent" below. |
+| Set up USB backup automount (checkbox) | Installs `usb-backup/` (a udev rule) so a plugged-in USB stick can serve as an extra backup target. Off by default; stored as `POS_USB_BACKUP` in `.env`. Hidden in WSL 2 mode. See "USB Backup Target" below. |
 
 This step also shows a read-only summary (API URL, GHCR user, app/port/db/image values) and live deployment logs.
 
@@ -103,6 +104,33 @@ This step also shows a read-only summary (API URL, GHCR user, app/port/db/image 
 - Stores deployment logs under `logs/deploy-<timestamp>.log`.
 
 ---
+
+## USB Backup Target
+
+Backups normally live in `backups/` on this machine only. A USB stick can be
+registered as an additional target, so every database and image backup is
+written to both places.
+
+Why a host component is involved: the backup service is a container, and a
+container cannot mount a block device. The host mounts the stick; compose only
+makes that mount visible (`/external/*`, with `rslave` propagation — without it
+a stick plugged in after container start stays invisible). On a machine with a
+desktop session udisks already mounts sticks under `/media/<user>/<LABEL>` and
+nothing extra is needed. Kiosk terminals have no desktop session, so the
+`usb-backup/` udev rule mounts them to `/mnt/kassio-usb/by-uuid/<UUID>` instead.
+
+Setup:
+
+1. Tick *Set up USB backup automount* in step 3 (or run
+   `sudo usb-backup/install.sh` by hand).
+2. `docker compose up -d backup` — the `/external` bind mounts come from the
+   compose file, so an existing installation needs `git pull` here first.
+3. POS ▸ Settings ▸ Backup ▸ External targets ▸ Add target.
+
+The stick belongs in the **Docker host**, not in a thin-client terminal. If a
+target is not connected when a backup runs, the backup still succeeds and the
+target is flagged as failed — a pulled-out stick never fails the nightly
+backup. Details and troubleshooting: `usb-backup/README.md`.
 
 ## Kiosk Power Agent
 

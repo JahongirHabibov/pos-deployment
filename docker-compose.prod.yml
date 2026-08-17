@@ -304,11 +304,22 @@ services:
     env_file: .env
     environment:
       IMAGE_DATA_DIR: /data/images
+      EXTERNAL_ROOTS: /external/managed,/external/media,/external/run-media
     # KEIN ports: — Backup ist nur intern über pos-network erreichbar!
     volumes:
       - ./backups:/backups
       - pos-backup-state:/app/state    # Persistent scheduler config + history (survives updates)
       - pos-image-data:/data/images    # Image backup source (same named volume as image-service)
+      # Externe Backup-Ziele (USB-Sticks). Ein Container kann kein Blockgerät
+      # mounten — der Host mountet das Medium, diese Binds machen es nur
+      # sichtbar. `rslave` ist Pflicht: ohne Propagation sieht der Container
+      # nur den Stand vom Containerstart, ein später eingesteckter Stick bleibt
+      # unsichtbar und Backups landen still auf der Container-Ebene.
+      # Leere Verzeichnisse kosten nichts; die Funktion bleibt aus, bis ein
+      # Admin unter Einstellungen ▸ Datensicherung ein Medium einträgt.
+      - /mnt/kassio-usb:/external/managed:rslave     # Automount aus usb-backup/
+      - /media:/external/media:rslave                # Desktop-Sitzung (udisks)
+      - /run/media:/external/run-media:rslave        # systemd-/udisks-Variante
     networks:
       - pos-network
     restart: unless-stopped

@@ -118,5 +118,9 @@
   "s3_diagnostics": "Diagnose-System installieren (empfohlen)",
   "s3_diagnostics_hint": "Richtet ein lokales Diagnose- und Reparaturwerkzeug ein, das der Kunde unter http://127.0.0.1:9120/ im Browser öffnet. Damit lassen sich Drucker, Netzwerk, Uhrzeit und die Kassendienste selbst prüfen und die häufigsten Störungen ohne Technikereinsatz beheben.",
   "s3_diagnostics_ok": "✓ Diagnose-System installiert — erreichbar unter http://127.0.0.1:9120/",
-  "s3_diagnostics_fail": "✗ Diagnose-System konnte nicht installiert werden: {exc} — die Kasse läuft trotzdem."
+  "s3_diagnostics_fail": "✗ Diagnose-System konnte nicht installiert werden: {exc} — die Kasse läuft trotzdem.",
+  "s3_usb_backup": "USB-Backup-Automount auf diesem Gerät einrichten",
+  "s3_usb_backup_hint": "Sorgt dafür, dass ein angesteckter USB-Stick als zusätzliches Backup-Ziel erkannt wird. Nur auf dem Docker-Host sinnvoll — nicht auf reinen Browser-Terminals. Ohne diese Regel bleibt ein Stick auf Kiosk-Geräten unsichtbar, weil dort keine Desktop-Sitzung ihn einhängt. Aktivieren im POS danach unter Einstellungen ▸ Datensicherung.",
+  "s3_usb_backup_ok": "✓ USB-Backup-Automount eingerichtet.",
+  "s3_usb_backup_fail": "✗ USB-Backup-Automount konnte nicht eingerichtet werden ({exc}). Das Deployment selbst war erfolgreich — es lassen sich nur keine USB-Ziele eintragen."
 }

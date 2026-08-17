@@ -39,6 +39,8 @@ KIOSK_AGENT_DIR = REPO_DIR / "kiosk-agent"
 KIOSK_AGENT_INSTALL = KIOSK_AGENT_DIR / "install.sh"
 DIAGNOSTICS_DIR = REPO_DIR / "diagnostics"
 DIAGNOSTICS_INSTALL = DIAGNOSTICS_DIR / "install.sh"
+USB_BACKUP_DIR  = REPO_DIR / "usb-backup"
+USB_BACKUP_INSTALL = USB_BACKUP_DIR / "install.sh"
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 C_BRAND     = "#1a1a2e"
@@ -374,22 +376,30 @@ KIOSK_AGENT_ENV_KEY = "POS_KIOSK_AGENT"
 # container cannot do. See diagnostics/README.md.
 DIAGNOSTICS_ENV_KEY = "POS_DIAGNOSTICS"
 
+# ── USB backup automount ─────────────────────────────────────────────────────
+# A container cannot mount a block device, and a kiosk terminal has no desktop
+# session to do it either. Without this host-side rule a plugged-in stick never
+# becomes visible to the backup sidecar. See usb-backup/README.md.
+USB_BACKUP_ENV_KEY = "POS_USB_BACKUP"
+
 
 def _step3_row_offsets(show_sudo: bool, show_kiosk: bool,
-                       show_diagnostics: bool = False) -> tuple[int, int, int]:
+                       show_diagnostics: bool = False,
+                       show_usb: bool = False) -> tuple[int, int, int, int]:
     """Grid-row offsets for the optional widgets on step 3.
 
     Each optional block takes two rows (input plus its hint/toggle). The log
     widget has to start below whatever is actually shown — get this wrong and
     the log overlaps the sudo field or one of the checkboxes.
 
-    Returns (sudo_offset, kiosk_offset, total). The diagnostics block sits
-    below both, so its own offset is the sum of the first two.
+    Returns (sudo_offset, kiosk_offset, diagnostics_offset, total). Every block
+    sits below the previous ones, so each offset is the sum of what precedes it.
     """
     sudo = 2 if show_sudo else 0
     kiosk = 2 if show_kiosk else 0
     diagnostics = 2 if show_diagnostics else 0
-    return sudo, kiosk, sudo + kiosk + diagnostics
+    usb = 2 if show_usb else 0
+    return sudo, kiosk, diagnostics, sudo + kiosk + diagnostics + usb
 
 
 def _kiosk_agent_origin(port: str) -> str:
@@ -1573,8 +1583,11 @@ class InstallerApp:
         show_kiosk = KIOSK_AGENT_INSTALL.is_file() and not self._data.get("wsl2")
         # Diagnostics service — needs a systemd host, same as the power agent.
         show_diagnostics = DIAGNOSTICS_INSTALL.is_file() and not self._data.get("wsl2")
-        sudo_row_offset, kiosk_row_offset, extra_rows = _step3_row_offsets(
-            show_sudo, show_kiosk, show_diagnostics)
+        # USB backup automount — needs udev + systemd on the host, so not in WSL 2.
+        show_usb = USB_BACKUP_INSTALL.is_file() and not self._data.get("wsl2")
+        (sudo_row_offset, kiosk_row_offset, diagnostics_row_offset,
+         extra_rows) = _step3_row_offsets(
+            show_sudo, show_kiosk, show_diagnostics, show_usb)
 
         self._s3_sudo_var: tk.StringVar | None = None
         self._s3_sudo_entry: tk.Entry | None = None
@@ -1637,6 +1650,26 @@ class InstallerApp:
             ).grid(row=diagnostics_row + 1, column=0, columnspan=2,
                    sticky="w", pady=(0, 4))
 
+        # ── USB backup automount — optional host-level install ─────────────
+        self._s3_usb_var: tk.BooleanVar | None = None
+        if show_usb:
+            enabled_before = _read_env_keys([USB_BACKUP_ENV_KEY]).get(
+                USB_BACKUP_ENV_KEY, "").strip().lower() == "true"
+            self._s3_usb_var = tk.BooleanVar(value=enabled_before)
+            usb_row = (next_row + 2 + sudo_row_offset + kiosk_row_offset
+                       + diagnostics_row_offset)
+            tk.Checkbutton(
+                c, text=t("s3_usb_backup"),
+                variable=self._s3_usb_var,
+                bg="white", font=("Segoe UI", self._get_font_size(10)),
+                anchor="w", justify=tk.LEFT,
+            ).grid(row=usb_row, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            tk.Label(
+                c, text=t("s3_usb_backup_hint"), bg="white", fg="#555",
+                font=("Segoe UI", self._get_font_size(9)),
+                wraplength=self._get_wraplength(560), anchor="w", justify=tk.LEFT,
+            ).grid(row=usb_row + 1, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
         tk.Label(c, text=t("s3_lbl_log"), bg="white",
                  font=("Segoe UI", self._get_font_size(10), "bold")).grid(
             row=next_row+2+extra_rows, column=0, columnspan=2, sticky="w", pady=(4, 2))
@@ -1672,6 +1705,9 @@ class InstallerApp:
         diagnostics_var = getattr(self, "_s3_diagnostics_var", None)
         if diagnostics_var is not None:
             self._data["install_diagnostics"] = bool(diagnostics_var.get())
+        usb_var = getattr(self, "_s3_usb_var", None)
+        if usb_var is not None:
+            self._data["install_usb_backup"] = bool(usb_var.get())
 
         self._btn_back.configure(state=tk.DISABLED)
 
@@ -1980,6 +2016,48 @@ class InstallerApp:
                                   t("s3_diagnostics_fail", exc=f"exit {p.returncode}"),
                                   C_DANGER)
 
+                def _install_usb_backup() -> None:
+                    """Install the USB automount rule after a successful deploy.
+
+                    Runs last and never fails the deployment: without it the POS
+                    works exactly as before, the operator merely cannot register
+                    a USB stick as an extra backup target.
+                    """
+                    self._log(self._s3_log, "")
+                    self._log(self._s3_log, "▶ sudo usb-backup/install.sh", "#7ec8e3")
+                    cmd = ["sudo", "-k", "-S", "bash", str(USB_BACKUP_INSTALL)]
+                    try:
+                        p = subprocess.Popen(
+                            cmd,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            cwd=str(REPO_DIR),
+                            env=env,
+                        )
+                    except OSError as exc:
+                        self._log(self._s3_log,
+                                  t("s3_usb_backup_fail", exc=str(exc)), C_DANGER)
+                        return
+                    assert p.stdin is not None
+                    p.stdin.write(sudo_password + "\n")
+                    p.stdin.flush()
+                    p.stdin.close()
+                    assert p.stdout is not None
+                    for line in p.stdout:
+                        clean = line.rstrip()
+                        if clean.startswith("[sudo]"):
+                            continue
+                        self._log(self._s3_log, clean)
+                    p.wait()
+                    if p.returncode == 0:
+                        self._log(self._s3_log, t("s3_usb_backup_ok"), C_SUCCESS)
+                    else:
+                        self._log(self._s3_log,
+                                  t("s3_usb_backup_fail", exc=f"exit {p.returncode}"),
+                                  C_DANGER)
+
                 def _sudo_capture(cmd: list[str], timeout: int = 20):
                     """Run a sudo command, feed the password, return the process."""
                     p = subprocess.Popen(
@@ -2102,6 +2180,15 @@ class InstallerApp:
                         _patch_env_keys({DIAGNOSTICS_ENV_KEY: "true" if wanted else "false"})
                         if wanted:
                             _install_diagnostics()
+
+                    # Same rule again: unticking stops future installs, it does
+                    # not unmount anything or remove the udev rule. Use
+                    # usb-backup/uninstall.sh for that.
+                    if getattr(self, "_s3_usb_var", None) is not None:
+                        wanted = bool(self._data.get("install_usb_backup"))
+                        _patch_env_keys({USB_BACKUP_ENV_KEY: "true" if wanted else "false"})
+                        if wanted:
+                            _install_usb_backup()
 
                     def _finish():
                         self._btn_next.configure(

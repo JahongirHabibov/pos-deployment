@@ -1,0 +1,23 @@
+# KASSIO — automount USB storage for POS backups
+#
+# The backup sidecar runs in a container, and a container cannot mount a block
+# device. Something on the host has to attach the stick to a directory that the
+# compose bind mounts expose. On a kiosk terminal there is no desktop session
+# and therefore no udisks automount, so that "something" is this rule.
+#
+# Mount point is /mnt/kassio-usb/by-uuid/<FS-UUID>: stable across ports and
+# relabels, and unique per medium. The sidecar never locates a target by path —
+# it reads a marker file — so the layout here only has to be deterministic.
+#
+# systemd-mount --no-block is used instead of a plain mount call because udev
+# kills long-running RUN commands; it hands the work to systemd and returns.
+# nosuid,nodev,noexec are not cosmetic: this mounts a foreign filesystem handed
+# to the machine by whoever walked in with a stick.
+
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", \
+  ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_UUID_ENC}=="?*", \
+  RUN+="/usr/bin/systemd-mount --no-block --collect --options=nosuid,nodev,noexec $devnode /mnt/kassio-usb/by-uuid/$env{ID_FS_UUID_ENC}"
+
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", \
+  ENV{ID_FS_UUID_ENC}=="?*", \
+  RUN+="/usr/bin/systemd-umount /mnt/kassio-usb/by-uuid/$env{ID_FS_UUID_ENC}"

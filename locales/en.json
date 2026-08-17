@@ -118,5 +118,9 @@
   "s3_diagnostics": "Install diagnostics system (recommended)",
   "s3_diagnostics_hint": "Sets up a local diagnostics and repair tool the customer opens in a browser at http://127.0.0.1:9120/. It checks printers, network, clock and the POS services, and fixes the most common faults without a technician visit.",
   "s3_diagnostics_ok": "✓ Diagnostics system installed — available at http://127.0.0.1:9120/",
-  "s3_diagnostics_fail": "✗ The diagnostics system could not be installed: {exc} — the POS still works."
+  "s3_diagnostics_fail": "✗ The diagnostics system could not be installed: {exc} — the POS still works.",
+  "s3_usb_backup": "Set up USB backup automount on this machine",
+  "s3_usb_backup_hint": "Makes a plugged-in USB stick usable as an extra backup target. Only useful on the Docker host — not on browser-only terminals. Without this rule a stick stays invisible on kiosk machines, because no desktop session is there to mount it. Enable it in the POS afterwards under Settings ▸ Backup.",
+  "s3_usb_backup_ok": "✓ USB backup automount installed.",
+  "s3_usb_backup_fail": "✗ USB backup automount could not be installed ({exc}). The deployment itself succeeded — you simply cannot register USB targets."
 }
