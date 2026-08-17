@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-17T10:14:04Z",
+  "updated_at": "2026-08-17T10:14:27Z",
   "services": {
     "backend": {
       "version": "v0.5.50",
@@ -24,18 +24,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.50",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.50",
-      "digest": "sha256:89af721b649cb1e43f2fc05811b6a9774ba4d109f3c7ccd52613e5b955e0337c",
+      "version": "v0.5.51",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.51",
+      "digest": "sha256:f1a0495f818d29b4ede4baa67b2b8af21484c3e7810f91aac5e530f7f6a241f3",
       "date": "2026-08-17",
       "changes": [
         {
-          "type": "fix",
-          "text": "refuse to close a drawer or a day with money in flight"
-        },
-        {
-          "type": "fix",
-          "text": "shed API overload as 429/503 instead of 502"
+          "type": "feature",
+          "text": "show an external target as a card, not a table row"
         }
       ]
     },
