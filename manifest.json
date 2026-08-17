@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-17T09:21:07Z",
+  "updated_at": "2026-08-17T09:21:33Z",
   "services": {
     "backend": {
       "version": "v0.5.50",
@@ -24,14 +24,18 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.48",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.48",
-      "digest": "sha256:a9422eb0826e670695e4f5c067dbdb3d557d72174675b051234fb0e752768eaa",
-      "date": "2026-08-12",
+      "version": "v0.5.50",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.50",
+      "digest": "sha256:89af721b649cb1e43f2fc05811b6a9774ba4d109f3c7ccd52613e5b955e0337c",
+      "date": "2026-08-17",
       "changes": [
         {
           "type": "fix",
-          "text": "dismiss the update badge per offer, not per highest version"
+          "text": "refuse to close a drawer or a day with money in flight"
+        },
+        {
+          "type": "fix",
+          "text": "shed API overload as 429/503 instead of 502"
         }
       ]
     },
