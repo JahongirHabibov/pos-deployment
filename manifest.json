@@ -1,25 +1,25 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-12T12:08:40Z",
+  "updated_at": "2026-08-17T09:21:07Z",
   "services": {
     "backend": {
-      "version": "v0.5.47",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.47",
-      "digest": "sha256:760a7302a8daba10b6fe9d59be9a2b4a6a4b5593f7ba24e786c189e720a5f25e",
-      "date": "2026-08-12",
+      "version": "v0.5.50",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.50",
+      "digest": "sha256:0ecdd341cdc3c21bda89aae239685142155b6276143bbb54469ecb413f1f8461",
+      "date": "2026-08-17",
       "changes": [
         {
           "type": "fix",
-          "text": "say which register is holding the business day open"
+          "text": "serialize total writes, price modifiers, free stuck tables"
         },
         {
           "type": "fix",
-          "text": "one open register on the running day, and a remove that runs"
+          "text": "refuse to close a drawer or a day with money in flight"
         },
         {
           "type": "fix",
-          "text": "make the report-exports revision idempotent"
+          "text": "shed API overload as 429/503 instead of 502"
         }
       ]
     },
