@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-08-17T09:38:12Z",
+  "updated_at": "2026-08-17T10:14:04Z",
   "services": {
     "backend": {
       "version": "v0.5.50",
@@ -64,10 +64,10 @@
       ]
     },
     "updater": {
-      "version": "v0.5.23",
-      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.23",
-      "digest": "sha256:d29151bb25e59053ef2c9b9c7d6ea3ccb45a4baaaa546ce9b622a607cd45fc72",
-      "date": "2026-08-12",
+      "version": "v0.5.24",
+      "image": "ghcr.io/jahongirhabibov/pos-updater:0.5.24",
+      "digest": "sha256:414a6131f3977da2eedd1ba4f73f526317fe2c6feae1e1ba2e0d89505233bc48",
+      "date": "2026-08-17",
       "changes": [
         {
           "type": "feature",
