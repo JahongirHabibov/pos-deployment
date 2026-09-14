@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-14T15:39:19Z",
+  "updated_at": "2026-09-14T15:39:42Z",
   "services": {
     "backend": {
       "version": "v0.5.51",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.51",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.51",
-      "digest": "sha256:f1a0495f818d29b4ede4baa67b2b8af21484c3e7810f91aac5e530f7f6a241f3",
-      "date": "2026-08-17",
+      "version": "v0.5.52",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.52",
+      "digest": "sha256:3038cea2ec655a4dbcd1da5a0a39da0509316513f403cd20d8d597ca0b1cf625",
+      "date": "2026-09-14",
       "changes": [
         {
           "type": "feature",
-          "text": "show an external target as a card, not a table row"
+          "text": "the till offers the print queue only while tickets wait"
         }
       ]
     },
