@@ -1,0 +1,10 @@
+[Unit]
+Description=POS kiosk browser (Chromium)
+# Never give up restarting: the POS screen must come back.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/pos-kiosk/kiosk-browser
+Restart=always
+RestartSec=2

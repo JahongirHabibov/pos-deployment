@@ -1,0 +1,18 @@
+#!/bin/sh
+# X session of the kiosk user: Openbox as window manager, Chromium as a
+# restartable systemd user service.
+
+# The screen never blanks or sleeps while the POS is on.
+xset s off -dpms s noblank 2>/dev/null || true
+
+# Hide the mouse pointer; a touch or mouse move shows it again.
+if command -v unclutter >/dev/null 2>&1; then
+  unclutter --start-hidden --hide-on-touch --fork 2>/dev/null || true
+fi
+
+systemctl --user import-environment DISPLAY XAUTHORITY
+systemctl --user restart pos-kiosk-browser.service
+
+openbox --config-file /etc/pos-kiosk/openbox-rc.xml
+
+systemctl --user stop pos-kiosk-browser.service

@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Restarts POS containers that Docker reports as unhealthy.
+
+Docker's `restart: unless-stopped` only acts when a container exits. A process
+that hangs keeps running, fails its healthcheck and stays that way. This script
+runs once a minute (pos-container-watchdog.timer) and restarts such a container.
+
+Guard rails:
+  * Only the containers in WATCHED. Never the database (a restart in the
+    middle of a write is worse than a hanging service), the backup sidecar (it
+    may be in the middle of a restore) or the updater (it may be mid-update).
+  * Only after UNHEALTHY_RUNS consecutive runs, on top of Docker's own retries.
+  * Never while the updater is applying an update.
+  * At most MAX_RESTARTS_PER_HOUR per container; then it stops and logs.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+WATCHED = ("pos-backend", "pos-image-service")
+UNHEALTHY_RUNS = 2
+MAX_RESTARTS_PER_HOUR = 3
+STATE_FILE = Path(os.environ.get("POS_WATCHDOG_STATE", "/var/lib/pos-kiosk/watchdog.json"))
+DEPLOYMENT_DIR = Path(os.environ.get("POS_DEPLOYMENT_DIR", "/opt/pos-deployment"))
+
+
+def log(message: str) -> None:
+    print(message, flush=True)
+
+
+def update_running(deployment_dir: Path) -> bool:
+    try:
+        state = json.loads((deployment_dir / "updater-state" / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (state.get("last_upgrade") or {}).get("status") == "running"
+
+
+def health_status(name: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--format",
+             "{{if .State.Health}}{{.State.Health.Status}}{{end}}", name],
+            capture_output=True, text=True, timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def load_state(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state), encoding="utf-8")
+    tmp.replace(path)
+
+
+def decide(entry: dict, status: str | None, now: float) -> tuple[dict, str]:
+    """Return the new per-container entry and the action: "none", "restart"
+    or "limit"."""
+    restarts = [t for t in entry.get("restarts", []) if now - t < 3600]
+    if status != "unhealthy":
+        return {"unhealthy_runs": 0, "restarts": restarts}, "none"
+    runs = entry.get("unhealthy_runs", 0) + 1
+    if runs < UNHEALTHY_RUNS:
+        return {"unhealthy_runs": runs, "restarts": restarts}, "none"
+    if len(restarts) >= MAX_RESTARTS_PER_HOUR:
+        # Report once, not every minute until the hour has passed.
+        action = "none" if entry.get("limit_logged") else "limit"
+        return {"unhealthy_runs": runs, "restarts": restarts, "limit_logged": True}, action
+    return {"unhealthy_runs": 0, "restarts": restarts + [now]}, "restart"
+
+
+def main() -> int:
+    if update_running(DEPLOYMENT_DIR):
+        log("update in progress, skipping")
+        return 0
+    state = load_state(STATE_FILE)
+    now = time.time()
+    for name in WATCHED:
+        entry, action = decide(state.get(name, {}), health_status(name), now)
+        if action == "restart":
+            log(f"{name} is unhealthy, restarting")
+            result = subprocess.run(["docker", "restart", name], capture_output=True, text=True)
+            if result.returncode != 0:
+                log(f"restart of {name} failed: {result.stderr.strip()}")
+        elif action == "limit":
+            log(f"{name} is unhealthy, but was restarted {MAX_RESTARTS_PER_HOUR} times "
+                "in the last hour; leaving it alone. Check: docker logs " + name)
+        state[name] = entry
+    save_state(STATE_FILE, state)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

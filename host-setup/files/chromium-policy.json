@@ -1,0 +1,31 @@
+{
+  "URLBlocklist": ["*"],
+  "URLAllowlist": [
+    "@POS_URL@",
+    "http://127.0.0.1:9110",
+    "http://127.0.0.1:9120",
+    "chrome://print"
+  ],
+  "DeveloperToolsAvailability": 2,
+  "IncognitoModeAvailability": 1,
+  "BrowserGuestModeEnabled": false,
+  "BrowserAddPersonEnabled": false,
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "PasswordManagerEnabled": false,
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "TranslateEnabled": false,
+  "SearchSuggestEnabled": false,
+  "PromptForDownloadLocation": true,
+  "ExtensionInstallBlocklist": ["*"],
+  "DefaultBrowserSettingEnabled": false,
+  "MetricsReportingEnabled": false,
+  "BackgroundModeEnabled": false,
+  "TaskManagerEndProcessEnabled": false,
+  "DefaultNotificationsSetting": 2,
+  "DefaultGeolocationSetting": 2,
+  "AutoplayAllowed": true,
+  "BookmarkBarEnabled": false,
+  "CommandLineFlagSecurityWarningsEnabled": false
+}

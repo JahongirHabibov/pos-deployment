@@ -1,0 +1,55 @@
+#!/bin/sh
+# Starts Chromium in kiosk mode on the POS. Run by pos-kiosk-browser.service
+# (systemd user unit), which restarts it whenever it exits.
+set -eu
+
+. /etc/pos-kiosk/kiosk.conf
+
+PROFILE="${HOME}/.local/share/pos-kiosk/chromium"
+mkdir -p "${PROFILE}"
+
+# A power cut leaves the profile lock behind; Chromium then refuses to start
+# ("profile in use by another computer").
+rm -f "${PROFILE}/SingletonLock" "${PROFILE}/SingletonSocket" "${PROFILE}/SingletonCookie"
+
+# ...and marks the last run as crashed, which puts a "Restore pages?" bar over
+# the POS. Mark it as a clean exit instead.
+python3 - "${PROFILE}/Default/Preferences" <<'PY'
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as fh:
+        prefs = json.load(fh)
+except (OSError, ValueError):
+    sys.exit(0)
+profile = prefs.setdefault("profile", {})
+profile["exit_type"] = "Normal"
+profile["exited_cleanly"] = True
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(prefs, fh)
+PY
+
+# Wait for the frontend container. Until it answers, Chromium could only show
+# its own error page. From here on the POS shows its own loading screen until
+# the backend is ready. curl paces the retries itself.
+until curl --silent --fail --output /dev/null --connect-timeout 2 \
+      --retry 30 --retry-delay 2 --retry-all-errors "${POS_URL}"; do
+  :
+done
+
+exec chromium \
+  --kiosk \
+  --user-data-dir="${PROFILE}" \
+  --no-first-run \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --password-store=basic \
+  --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --touch-events=enabled \
+  --disable-features=TranslateUI,OverscrollHistoryNavigation \
+  --autoplay-policy=no-user-gesture-required \
+  --disable-background-networking \
+  --disable-component-update \
+  "${POS_URL}"

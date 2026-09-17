@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=POS Kiosk
+Comment=POS in full-screen browser
+Exec=/usr/local/lib/pos-kiosk/kiosk-session

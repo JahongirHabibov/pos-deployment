@@ -1,0 +1,10 @@
+#!/bin/sh
+# LightDM session wrapper. The kiosk user always gets the kiosk session, even
+# if another session (e.g. LXQt) is picked for it on the login screen.
+if [ "$(id -un)" = "@KIOSK_USER@" ]; then
+  set -- /usr/local/lib/pos-kiosk/kiosk-session
+fi
+if [ -x /usr/sbin/lightdm-session ]; then
+  exec /usr/sbin/lightdm-session "$@"
+fi
+exec /etc/X11/Xsession "$@"

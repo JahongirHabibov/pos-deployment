@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart unhealthy POS containers
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=POS_DEPLOYMENT_DIR=@DEPLOYMENT_DIR@
+ExecStart=/usr/local/lib/pos-kiosk/container-watchdog
