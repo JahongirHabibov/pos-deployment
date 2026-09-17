@@ -16,6 +16,7 @@ import datetime
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,8 @@ from pathlib import Path
 
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
+
+import host_profile
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_DIR        = Path(__file__).parent.resolve()
@@ -449,6 +452,32 @@ def _patch_env_keys(mapping: dict[str, str]) -> None:
             content += f"\n{key}={value}"
     ENV_FILE.write_text(content, encoding="utf-8")
     ENV_FILE.chmod(0o600)  # .env holds secrets — keep it owner-only
+
+
+def _apply_host_profile(detect=host_profile.detect_profile) -> str | None:
+    """Write the PostgreSQL hardware profile (PG_* keys) into .env.
+
+    Runs on every deployment, so a disk swap or RAM upgrade is picked up by a
+    re-run. Returns the profile name, or None when .env says "manual".
+    """
+    key = host_profile.PROFILE_ENV_KEY
+    if _read_env_keys([key]).get(key) == host_profile.MANUAL_PROFILE:
+        return None
+    name, settings = detect()
+    _patch_env_keys({key: name, **settings})
+    return name
+
+
+UPDATER_TOKEN_ENV_KEY = "UPDATER_API_TOKEN"
+
+
+def _ensure_updater_token() -> bool:
+    """Generate the backend↔updater service token once. Returns True if a new
+    token was written. The value is never logged."""
+    if _read_env_keys([UPDATER_TOKEN_ENV_KEY]).get(UPDATER_TOKEN_ENV_KEY):
+        return False
+    _patch_env_keys({UPDATER_TOKEN_ENV_KEY: secrets.token_hex(32)})
+    return True
 
 
 def _export_env_to_os_environ(env: dict) -> None:
@@ -2126,6 +2155,20 @@ class InstallerApp:
                 # Before the containers start: the backend anchors its licence
                 # rollback check on the clock it sees at boot.
                 _ensure_clock_sync()
+
+                # ── Step 0b: Generated .env values ────────────────────────
+                # Before `up`: containers read these at creation. The updater
+                # token is created once; the database profile is re-detected
+                # on every run, and a changed value recreates the database
+                # container once.
+                if _ensure_updater_token():
+                    self._log(self._s3_log, t("s3_updater_token"), C_SUCCESS)
+                profile = _apply_host_profile()
+                self._log(self._s3_log, "")
+                if profile is None:
+                    self._log(self._s3_log, t("s3_hw_profile_manual"), "#aaaaaa")
+                else:
+                    self._log(self._s3_log, t("s3_hw_profile", profile=profile), C_SUCCESS)
 
                 # ── Step 1: Pull latest images ────────────────────────────
                 self._log(self._s3_log, "")
