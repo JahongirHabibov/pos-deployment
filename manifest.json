@@ -1,17 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-17T15:22:21Z",
+  "updated_at": "2026-09-18T21:48:09Z",
   "services": {
     "backend": {
-      "version": "v0.5.51",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.51",
-      "digest": "sha256:d5f52294a1526e2083de5676a113bd22541c9248f93ed86730a70f0d53f49008",
-      "date": "2026-09-14",
+      "version": "v0.5.53",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.53",
+      "digest": "sha256:ff91af3f043bbada6a33edeb7f640b61cee00c76b871d91bf9b28a3b78aa5c36",
+      "date": "2026-09-18",
       "changes": [
         {
           "type": "feature",
-          "text": "the till offers the print queue only while tickets wait"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
