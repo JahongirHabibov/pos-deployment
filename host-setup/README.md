@@ -46,7 +46,7 @@ Debian 13
 | `packages` | Comments out `deb cdrom:` sources (backup: `sources.list.pos-backup`) and stops with a clear message if no Debian mirror is reachable. Warns if the `trixie-security` source is missing (Chromium gets its updates only there). Runs `apt-get full-upgrade` (changed configuration files are kept), then installs LightDM, Openbox, Chromium, Xorg with libinput, `unclutter-xfixes`, `zram-tools`, OpenSSH, NetworkManager, `curl`, `python3-tk`, `git`, `sudo`, `exfatprogs` and `ntfs-3g` (USB backup sticks), `systemd-timesyncd` (skipped if chrony/ntpsec is present), and `lxqt-core` if no LXQt is installed. Presets LightDM as the display manager. |
 | `docker` | Adds the Docker apt repository (signing key fingerprint verified), installs Docker CE and the Compose plugin as in the [official guide](https://docs.docker.com/engine/install/debian/), holds the packages. If a conflicting package from that guide (`docker.io`, `podman-docker`, `containerd`, `runc`, …) is installed, nothing is changed and the warning names the packages to remove. |
 | `users` | Creates the kiosk user with a locked password and adds it to `nopasswdlogin`. Removes it from `sudo`, `docker` and `adm`. Adds the administrator to `sudo` (needed by `installer.py`). |
-| `kiosk` | Kiosk session, Chromium policy, LightDM autologin, disables SDDM (details below). |
+| `kiosk` | Kiosk session, Chromium policy, LightDM autologin, disables SDDM, lets `nopasswdlogin` members pass the LightDM login without a password (details below). |
 | `powerloss` | GRUB: `fsck.repair=yes`, timeout 3 s; on UEFI also installs `EFI/BOOT/BOOTX64.EFI`. journald persistent (max. 200 MB), power button = clean shutdown, suspend/hibernate masked. |
 | `memory` | zram swap: zstd, 50 % of RAM, priority 100 (used before any disk swap). |
 | `time` | NTP on, RTC in UTC. Warns if the system clock or the RTC is obviously wrong, or if the timezone is UTC (receipts would print UTC). |
@@ -149,6 +149,7 @@ is the single most effective upgrade.
 | `/etc/systemd/system/pos-container-watchdog.{service,timer}` | Watchdog |
 | `/etc/chromium/policies/managed/pos-kiosk.json` | Chromium policy |
 | `/etc/lightdm/lightdm.conf.d/50-pos-kiosk.conf` | Autologin |
+| `/etc/pam.d/lightdm` | One line added: `nopasswdlogin` members log in without a password (Debian lacks it; Ubuntu ships it) |
 | `/etc/default/grub.d/90-pos-kiosk.cfg` | Kernel command line, GRUB timeout |
 | `/etc/systemd/{journald,logind}.conf.d/50-pos-kiosk.conf` | Logs, power button |
 | `/etc/ssh/sshd_config.d/10-pos-kiosk.conf` | SSH hardening |

@@ -162,6 +162,15 @@ def test_dry_run_writes_nothing(tmp_path):
 
 # ── misc ─────────────────────────────────────────────────────────────────────
 
+def test_pam_with_nopasswdlogin():
+    debian = "#%PAM-1.0\nauth requisite pam_nologin.so\n\n@include common-auth\n\n@include common-account\n"
+    patched = hs.pam_with_nopasswdlogin(debian)
+    assert patched.index(hs.NOPASSWD_RULE) < patched.index("@include common-auth")
+    assert patched.count("nopasswdlogin") == 1
+    assert hs.pam_with_nopasswdlogin(patched) is None      # re-run changes nothing
+    assert hs.pam_with_nopasswdlogin("") is None           # lightdm not installed
+
+
 def test_has_candidate():
     assert hs.has_candidate("chromium:\n  Installed: (none)\n  Candidate: 140.0-1\n")
     assert not hs.has_candidate("chromium:\n  Installed: (none)\n  Candidate: (none)\n")

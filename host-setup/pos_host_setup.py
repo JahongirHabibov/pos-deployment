@@ -191,6 +191,21 @@ def parse_os_release(text: str) -> dict[str, str]:
 
 # ─────────────────────────────────────────────────────── file contents
 
+NOPASSWD_RULE = "auth sufficient pam_succeed_if.so user ingroup nopasswdlogin"
+
+
+def pam_with_nopasswdlogin(pam: str) -> str | None:
+    """Add the nopasswdlogin rule before common-auth, as Ubuntu ships it.
+    Debian's /etc/pam.d/lightdm lacks it, so switching back from the login
+    screen to the running kiosk session asks for the locked password.
+    Returns None if the rule is present or there is no place for it."""
+    if "nopasswdlogin" in pam:
+        return None
+    new, count = re.subn(r"^@include common-auth$", f"{NOPASSWD_RULE}\n@include common-auth",
+                         pam, count=1, flags=re.MULTILINE)
+    return new if count else None
+
+
 def lightdm_conf(kiosk_user: str, admin_session: str | None) -> str:
     lines = [
         "# Written by pos-deployment/host-setup. The kiosk user is logged in",
@@ -497,11 +512,15 @@ def step_kiosk(ctx: Context) -> None:
     run(ctx, ["systemctl", "enable", "--force", "lightdm.service"])
     run(ctx, ["systemctl", "set-default", "graphical.target"])
 
+    pam_file = Path("/etc/pam.d/lightdm")
     try:
-        pam = Path("/etc/pam.d/lightdm").read_text(encoding="utf-8")
+        pam = pam_file.read_text(encoding="utf-8")
     except OSError:
         pam = ""
-    if "nopasswdlogin" not in pam:
+    patched = pam_with_nopasswdlogin(pam)
+    if patched is not None:
+        write_file(ctx, pam_file, patched)
+    elif "nopasswdlogin" not in pam:
         warn(ctx, "/etc/pam.d/lightdm has no nopasswdlogin rule: returning to the "
                   "kiosk from the login screen will ask for a password")
 
