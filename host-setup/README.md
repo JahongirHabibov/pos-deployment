@@ -32,7 +32,7 @@ Debian 13
 | Option | Default | Purpose |
 |---|---|---|
 | `--admin-user` | the user who ran `sudo` | Administrator account (LXQt, SSH). Must exist; never `root` or the kiosk user. |
-| `--kiosk-user` | `pos` | Account that is logged in automatically. Created if missing. |
+| `--kiosk-user` | `pos` | Account that is logged in automatically. Created if missing. If Debian was installed with a user named `pos`, pick another name (`--kiosk-user kiosk`) and keep `pos` as administrator. |
 | `--deployment-dir` | this repository | Path used by the watchdog to see a running update. |
 | `--port` | `POS_PUBLIC_PORT` from `.env`, else `80` | Port of the kiosk URL. |
 | `--only`, `--skip` | all steps | Comma-separated step names (see below). |

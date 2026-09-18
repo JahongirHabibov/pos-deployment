@@ -310,6 +310,22 @@ def timezone_problem(zone: str) -> str | None:
     return None
 
 
+def admin_user_problem(admin: str, kiosk: str, exists: bool) -> str | None:
+    if not admin:
+        return ("no administrator user: run with sudo from the administrator's "
+                "account, or add --admin-user <name>")
+    if admin == "root":
+        return "the administrator must not be root: add --admin-user <name>"
+    if admin == kiosk:
+        # The users step locks the kiosk user's password and removes it from sudo.
+        return (f"'{admin}' is both administrator and kiosk user; the kiosk user "
+                "loses its password and sudo. Keep this account as administrator "
+                "and name another kiosk user, e.g. --kiosk-user kiosk")
+    if not exists:
+        return f"administrator user '{admin}' does not exist (use --admin-user)"
+    return None
+
+
 def clock_problem(system_now: float, rtc_epoch: float | None) -> str | None:
     if system_now < CLOCK_FLOOR:
         return "system clock is before 2026 - set the time and check the CMOS battery"
@@ -328,8 +344,9 @@ def step_preflight(ctx: Context, force: bool) -> None:
         if not force:
             raise SystemExit(f"ERROR: {message} (use --force to continue anyway)")
         warn(ctx, message)
-    if not user_exists(ctx.admin_user) or ctx.admin_user in ("root", ctx.kiosk_user):
-        raise SystemExit(f"ERROR: invalid administrator user '{ctx.admin_user}' (use --admin-user)")
+    problem = admin_user_problem(ctx.admin_user, ctx.kiosk_user, user_exists(ctx.admin_user))
+    if problem:
+        raise SystemExit(f"ERROR: {problem}")
 
 
 def check_ssh_lockout(ctx: Context) -> None:

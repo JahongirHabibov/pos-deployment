@@ -162,6 +162,15 @@ def test_dry_run_writes_nothing(tmp_path):
 
 # ── misc ─────────────────────────────────────────────────────────────────────
 
+def test_admin_user_problem():
+    assert hs.admin_user_problem("admin", "pos", True) is None
+    assert "--admin-user" in hs.admin_user_problem("", "pos", False)
+    assert "root" in hs.admin_user_problem("root", "pos", True)
+    assert "does not exist" in hs.admin_user_problem("ghost", "pos", False)
+    # Debian installed with user "pos": the fix is another kiosk user, not another admin.
+    assert "--kiosk-user" in hs.admin_user_problem("pos", "pos", True)
+
+
 def test_clock_problem():
     now = 1_790_000_000  # 2026-09
     assert hs.clock_problem(now, now + 5) is None
