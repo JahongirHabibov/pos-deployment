@@ -35,6 +35,9 @@ BASE_PACKAGES = [
     # Missing when a root password was set during the Debian install;
     # installer.py needs it.
     "sudo",
+    # USB backup sticks: exFAT tools and NTFS read-write (the kernel driver
+    # mounts NTFS read-only). usb-backup/install.sh only reports them missing.
+    "exfatprogs", "ntfs-3g",
 ]
 # Only when no LXQt is present: the administrator needs a desktop for installer.py.
 ADMIN_DESKTOP_PACKAGES = ["lxqt-core", "lxqt-config"]
@@ -43,6 +46,12 @@ DOCKER_PACKAGES = [
     "docker-ce", "docker-ce-cli", "containerd.io",
     "docker-buildx-plugin", "docker-compose-plugin",
 ]
+# Unofficial packages that conflict with Docker CE (docs.docker.com/engine/install/debian).
+DOCKER_CONFLICTS = ["docker.io", "docker-compose", "docker-doc", "docker-buildx",
+                    "podman-docker", "containerd", "runc"]
+# Keep changed configuration files instead of stopping at a dpkg prompt.
+APT_KEEP_CONFIG = ["-o", "Dpkg::Options::=--force-confdef",
+                   "-o", "Dpkg::Options::=--force-confold"]
 DOCKER_GPG_URL = "https://download.docker.com/linux/debian/gpg"
 DOCKER_GPG_FINGERPRINT = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
 SLEEP_TARGETS = ["sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"]
@@ -289,6 +298,18 @@ def has_authorized_keys(user: str) -> bool:
         return False
 
 
+def has_security_source(policy: str, codename: str) -> bool:
+    """True if `apt-cache policy` lists the Debian security archive."""
+    return f"{codename}-security" in policy
+
+
+def timezone_problem(zone: str) -> str | None:
+    if zone in ("", "UTC", "Etc/UTC"):
+        return (f"timezone is {zone or 'unset'}: receipts print UTC. Set it, e.g. "
+                "sudo timedatectl set-timezone Europe/Berlin, then run start-installer.sh")
+    return None
+
+
 def clock_problem(system_now: float, rtc_epoch: float | None) -> str | None:
     if system_now < CLOCK_FLOOR:
         return "system clock is before 2026 - set the time and check the CMOS battery"
@@ -354,13 +375,22 @@ def step_packages(ctx: Context) -> None:
                 "no Debian package mirror is configured (chromium not found). "
                 "Add one, e.g. /etc/apt/sources.list.d/debian.sources with "
                 "URIs: http://deb.debian.org/debian, and check the network.")
-    run(ctx, ["apt-get", "install", "-y", *packages])
+        codename = parse_os_release(Path("/etc/os-release").read_text()).get("VERSION_CODENAME", "trixie")
+        if not has_security_source(query(["apt-cache", "policy"]).stdout, codename):
+            warn(ctx, f"no {codename}-security source: Chromium and the kernel get no "
+                      "security fixes. Add URIs: http://security.debian.org/debian-security "
+                      f"Suites: {codename}-security to /etc/apt/sources.list.d/debian.sources")
+    # Bring an install from an older image up to the current point release.
+    run(ctx, ["apt-get", "full-upgrade", "-y", *APT_KEEP_CONFIG])
+    run(ctx, ["apt-get", "install", "-y", *APT_KEEP_CONFIG, *packages])
 
 
 def step_docker(ctx: Context) -> None:
-    if package_installed("docker.io"):
-        warn(ctx, "Debian's docker.io is installed; leaving it. Docker CE from "
-                  "download.docker.com is the supported setup.")
+    conflicts = [p for p in DOCKER_CONFLICTS if package_installed(p)]
+    if conflicts and not package_installed("docker-ce"):
+        warn(ctx, f"{', '.join(conflicts)} installed; Docker CE not set up. Remove "
+                  f"them first (sudo apt-get remove {' '.join(conflicts)}), then run "
+                  "again with --only docker")
         return
     if not all(package_installed(p) for p in DOCKER_PACKAGES):
         codename = parse_os_release(Path("/etc/os-release").read_text()).get("VERSION_CODENAME", "trixie")
@@ -494,6 +524,10 @@ def step_time(ctx: Context) -> None:
     except (OSError, ValueError):
         rtc = None
     problem = clock_problem(time.time(), rtc)
+    if problem:
+        warn(ctx, problem)
+    zone = query(["timedatectl", "show", "-p", "Timezone", "--value"]).stdout.strip()
+    problem = timezone_problem(zone)
     if problem:
         warn(ctx, problem)
 

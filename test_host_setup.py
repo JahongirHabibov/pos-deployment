@@ -251,3 +251,40 @@ def test_policy_allows_downloads_with_save_dialog():
 
 def test_watchdog_never_restarts_backup():
     assert "pos-backup" not in wd.WATCHED
+
+
+def test_security_source_is_detected():
+    policy = (" 500 http://deb.debian.org/debian trixie/main amd64 Packages\n"
+              " 500 http://security.debian.org/debian-security trixie-security/main amd64 Packages\n")
+    assert hs.has_security_source(policy, "trixie") is True
+    assert hs.has_security_source(policy.splitlines()[0], "trixie") is False
+
+
+def test_timezone_problem():
+    assert hs.timezone_problem("Europe/Berlin") is None
+    for zone in ("", "UTC", "Etc/UTC"):
+        assert "timedatectl set-timezone" in hs.timezone_problem(zone)
+
+
+def test_packages_follow_docker_and_usb_backup_needs():
+    # docs.docker.com/engine/install/debian: exactly these five packages.
+    assert hs.DOCKER_PACKAGES == ["docker-ce", "docker-ce-cli", "containerd.io",
+                                  "docker-buildx-plugin", "docker-compose-plugin"]
+    assert "docker.io" in hs.DOCKER_CONFLICTS
+    assert {"exfatprogs", "ntfs-3g"} <= set(hs.BASE_PACKAGES)
+
+
+def test_docker_conflicts_stop_only_a_fresh_install(monkeypatch):
+    ctx = hs.Context("pos", "admin", Path("/"), "80", dry_run=True)
+    calls = []
+    monkeypatch.setattr(hs, "run", lambda ctx, cmd, **kw: calls.append(cmd))
+    # Conflicting package, no Docker CE: nothing installed, packages named.
+    monkeypatch.setattr(hs, "package_installed", lambda p: p == "runc")
+    hs.step_docker(ctx)
+    assert calls == []
+    assert "sudo apt-get remove runc" in ctx.warnings[0]
+    # Docker CE already set up: a leftover package does not block it.
+    monkeypatch.setattr(hs, "package_installed",
+                        lambda p: p == "runc" or p in hs.DOCKER_PACKAGES)
+    hs.step_docker(ctx)
+    assert ["apt-mark", "hold", *hs.DOCKER_PACKAGES] in calls

@@ -43,13 +43,13 @@ Debian 13
 
 | Step | What it does |
 |---|---|
-| `packages` | Comments out `deb cdrom:` sources (backup: `sources.list.pos-backup`) and stops with a clear message if no Debian mirror is reachable. Installs LightDM, Openbox, Chromium, Xorg with libinput, `unclutter-xfixes`, `zram-tools`, OpenSSH, NetworkManager, `curl`, `python3-tk`, `git`, `sudo`, `systemd-timesyncd` (skipped if chrony/ntpsec is present), and `lxqt-core` if no LXQt is installed. Presets LightDM as the display manager. |
-| `docker` | Adds the Docker apt repository (signing key fingerprint verified), installs Docker CE and the Compose plugin, holds the packages. If Debian's `docker.io` is installed, it is left alone with a warning. |
+| `packages` | Comments out `deb cdrom:` sources (backup: `sources.list.pos-backup`) and stops with a clear message if no Debian mirror is reachable. Warns if the `trixie-security` source is missing (Chromium gets its updates only there). Runs `apt-get full-upgrade` (changed configuration files are kept), then installs LightDM, Openbox, Chromium, Xorg with libinput, `unclutter-xfixes`, `zram-tools`, OpenSSH, NetworkManager, `curl`, `python3-tk`, `git`, `sudo`, `exfatprogs` and `ntfs-3g` (USB backup sticks), `systemd-timesyncd` (skipped if chrony/ntpsec is present), and `lxqt-core` if no LXQt is installed. Presets LightDM as the display manager. |
+| `docker` | Adds the Docker apt repository (signing key fingerprint verified), installs Docker CE and the Compose plugin as in the [official guide](https://docs.docker.com/engine/install/debian/), holds the packages. If a conflicting package from that guide (`docker.io`, `podman-docker`, `containerd`, `runc`, …) is installed, nothing is changed and the warning names the packages to remove. |
 | `users` | Creates the kiosk user with a locked password and adds it to `nopasswdlogin`. Removes it from `sudo`, `docker` and `adm`. Adds the administrator to `sudo` (needed by `installer.py`). |
 | `kiosk` | Kiosk session, Chromium policy, LightDM autologin, disables SDDM (details below). |
 | `powerloss` | GRUB: `fsck.repair=yes`, timeout 3 s; on UEFI also installs `EFI/BOOT/BOOTX64.EFI`. journald persistent (max. 200 MB), power button = clean shutdown, suspend/hibernate masked. |
 | `memory` | zram swap: zstd, 50 % of RAM, priority 100 (used before any disk swap). |
-| `time` | NTP on, RTC in UTC. Warns if the system clock or the RTC is obviously wrong. |
+| `time` | NTP on, RTC in UTC. Warns if the system clock or the RTC is obviously wrong, or if the timezone is UTC (receipts would print UTC). |
 | `ssh` | Key login only: password and keyboard-interactive login off, `PermitRootLogin no`, kiosk user denied. Safeguards: refuses to start when run over SSH without a key in `~/.ssh/authorized_keys` (you would be locked out); `sshd -t` before reload, previous file restored if it fails; `sshd -T` must report the values (another drop-in may win); `reload` keeps open connections. Without a key only local login works until one is added. |
 | `watchdog` | Installs and starts `pos-container-watchdog.timer`. |
 
