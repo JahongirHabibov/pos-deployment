@@ -162,6 +162,21 @@ def test_dry_run_writes_nothing(tmp_path):
 
 # ── misc ─────────────────────────────────────────────────────────────────────
 
+def test_has_candidate():
+    assert hs.has_candidate("chromium:\n  Installed: (none)\n  Candidate: 140.0-1\n")
+    assert not hs.has_candidate("chromium:\n  Installed: (none)\n  Candidate: (none)\n")
+    assert not hs.has_candidate("")
+
+
+def test_query_output_is_untranslated(monkeypatch):
+    # A German terminal made apt print "Installationskandidat:" and the
+    # packages step reported a missing mirror.
+    monkeypatch.setenv("LANG", "de_DE.UTF-8")
+    monkeypatch.setenv("LANGUAGE", "de")
+    out = hs.query(["sh", "-c", 'echo "$LC_ALL|${LANGUAGE-unset}"']).stdout.strip()
+    assert out == "C.UTF-8|unset"
+
+
 def test_admin_user_problem():
     assert hs.admin_user_problem("admin", "pos", True) is None
     assert "--admin-user" in hs.admin_user_problem("", "pos", False)

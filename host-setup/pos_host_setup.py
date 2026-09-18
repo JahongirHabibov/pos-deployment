@@ -99,9 +99,12 @@ def run(ctx: Context, cmd: list[str], check: bool = True, **kwargs) -> subproces
 
 
 def query(cmd: list[str]) -> subprocess.CompletedProcess:
-    """Read-only command; also runs in dry-run mode."""
+    """Read-only command; also runs in dry-run mode. Output is parsed, so it
+    must not be translated (German apt says "Installationskandidat:")."""
+    env = {k: v for k, v in os.environ.items() if k != "LANGUAGE"}
+    env["LC_ALL"] = "C.UTF-8"
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=env)
     except (OSError, subprocess.SubprocessError) as exc:
         return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=str(exc))
 
@@ -298,6 +301,12 @@ def has_authorized_keys(user: str) -> bool:
         return False
 
 
+def has_candidate(policy: str) -> bool:
+    """True if `apt-cache policy <pkg>` (untranslated) offers a version."""
+    match = re.search(r"^\s*Candidate:\s*(\S+)", policy, flags=re.MULTILINE)
+    return bool(match) and match.group(1) != "(none)"
+
+
 def has_security_source(policy: str, codename: str) -> bool:
     """True if `apt-cache policy` lists the Debian security archive."""
     return f"{codename}-security" in policy
@@ -386,8 +395,7 @@ def step_packages(ctx: Context) -> None:
         input="lightdm shared/default-x-display-manager select lightdm\n")
     run(ctx, ["apt-get", "update"])
     if not ctx.dry_run:
-        policy = query(["apt-cache", "policy", "chromium"]).stdout
-        if "Candidate:" not in policy or "Candidate: (none)" in policy:
+        if not has_candidate(query(["apt-cache", "policy", "chromium"]).stdout):
             raise SetupError(
                 "no Debian package mirror is configured (chromium not found). "
                 "Add one, e.g. /etc/apt/sources.list.d/debian.sources with "
