@@ -19,8 +19,10 @@ Debian 13 (trixie)
 ```
 
 1. Install Debian 13 with LXQt and an administrator account (with sudo),
-   clone this repository.
-2. Prepare the machine (kiosk, Docker, power-cut hardening):
+   clone this repository. Install with network access (package mirror and
+   `trixie-security`, Chromium's updates come only from there) and pick the
+   restaurant's timezone: receipts print in the host timezone.
+2. Prepare the machine (system update, kiosk, Docker, power-cut hardening):
    ```bash
    sudo ./host-setup/setup.sh
    sudo reboot
@@ -66,9 +68,12 @@ Optional fast re-deploy mode:
 ```
 
 What `start-installer.sh` does before opening the GUI:
+- Pulls the latest version of this repository (`git pull --ff-only`) and
+  restarts itself; offline it continues with the local version.
 - Verifies Python 3.10+ is available.
 - Verifies `tkinter` is installed.
 - Verifies `installer.py` exists in the same directory.
+- Stops if Docker or the Compose plugin is missing.
 - Launches the wizard with forwarded CLI args (including `--skip-setup`).
 
 ---
