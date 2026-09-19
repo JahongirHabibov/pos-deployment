@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-18T21:48:58Z",
+  "updated_at": "2026-09-19T08:55:42Z",
   "services": {
     "backend": {
       "version": "v0.5.53",
@@ -16,10 +16,10 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.54",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.54",
-      "digest": "sha256:4e6b30fda8dfd56b2647b2ef7721d5461c1900376b37d5411e9b0bbd4a998e19",
-      "date": "2026-09-18",
+      "version": "v0.5.55",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.55",
+      "digest": "sha256:8e97d7b5a638e9adebc7065493a15d073ff91f7150711536aeb87b00af5beedf",
+      "date": "2026-09-19",
       "changes": [
         {
           "type": "feature",
