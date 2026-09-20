@@ -1,17 +1,33 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-19T08:55:42Z",
+  "updated_at": "2026-09-20T12:30:08Z",
   "services": {
     "backend": {
-      "version": "v0.5.53",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.53",
-      "digest": "sha256:ff91af3f043bbada6a33edeb7f640b61cee00c76b871d91bf9b28a3b78aa5c36",
-      "date": "2026-09-18",
+      "version": "v0.5.54",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.54",
+      "digest": "sha256:3fc15a2c2068efd780e4cf072060a5a0d60bc8cc37101754f4627a7894d105bd",
+      "date": "2026-09-20",
       "changes": [
         {
           "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "text": "der Kassierer nimmt Geld an, ohne dass der Kellner es anmelden muss"
+        },
+        {
+          "type": "feature",
+          "text": "Kellner mit Fehlbetrag stehen mit Namen auf der Abrechnung"
+        },
+        {
+          "type": "feature",
+          "text": "eine Karte je Kellner, ein Klick zeigt seinen ganzen Abend"
+        },
+        {
+          "type": "fix",
+          "text": "die Abrechnung zeigt Zone und Tisch und aktualisiert sich von selbst"
+        },
+        {
+          "type": "feature",
+          "text": "die Kellner-Abrechnung liegt jetzt an der Kasse, nicht im Backoffice"
         }
       ]
     },
