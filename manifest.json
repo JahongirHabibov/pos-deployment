@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-21T10:19:53Z",
+  "updated_at": "2026-09-21T11:13:32Z",
   "services": {
     "backend": {
       "version": "v0.5.55",
@@ -20,34 +20,18 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.57",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.57",
-      "digest": "sha256:94b32067c0ab372bffd55c19fea162175b3d8c6ce83a0f31123d6911aaa15281",
+      "version": "v0.5.58",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.58",
+      "digest": "sha256:b44a58689da13dda92d7f7c0bbdcdcb7ffb7dd6a414635af412cdcc72c69cc1b",
       "date": "2026-09-21",
       "changes": [
         {
           "type": "fix",
-          "text": "Zonenfilter, NumPad auf dem Handy und Tippgrößen nach der Durchsicht"
+          "text": "vertippte Produkte erscheinen schon beim Tippen"
         },
         {
-          "type": "feature",
-          "text": "Zahlenfelder bekommen ein NumPad neben dem Dialog"
-        },
-        {
-          "type": "feature",
-          "text": "Filter im Checkout-Dashboard"
-        },
-        {
-          "type": "feature",
-          "text": "der Abschluss sagt, welche Sitzungen offen bleiben"
-        },
-        {
-          "type": "feature",
-          "text": "Board-Karten ohne doppelte Knöpfe, Aktionen im Zahnrad abschaltbar"
-        },
-        {
-          "type": "feature",
-          "text": "To-Go-Bestellungen lassen sich als Lieferung markieren"
+          "type": "fix",
+          "text": "Suchbegriffe mit Satzzeichen bleiben zusammen"
         }
       ]
     },
