@@ -1,33 +1,21 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-20T12:30:32Z",
+  "updated_at": "2026-09-21T10:19:22Z",
   "services": {
     "backend": {
-      "version": "v0.5.54",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.54",
-      "digest": "sha256:3fc15a2c2068efd780e4cf072060a5a0d60bc8cc37101754f4627a7894d105bd",
-      "date": "2026-09-20",
+      "version": "v0.5.55",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.55",
+      "digest": "sha256:6ae3ef717095e9c1e44bfdeb2c49119bf18c83caa81de020f3cfefa910cac8b7",
+      "date": "2026-09-21",
       "changes": [
         {
-          "type": "feature",
-          "text": "der Kassierer nimmt Geld an, ohne dass der Kellner es anmelden muss"
-        },
-        {
-          "type": "feature",
-          "text": "Kellner mit Fehlbetrag stehen mit Namen auf der Abrechnung"
-        },
-        {
-          "type": "feature",
-          "text": "eine Karte je Kellner, ein Klick zeigt seinen ganzen Abend"
-        },
-        {
           "type": "fix",
-          "text": "die Abrechnung zeigt Zone und Tisch und aktualisiert sich von selbst"
+          "text": "Zonenfilter, NumPad auf dem Handy und Tippgrößen nach der Durchsicht"
         },
         {
           "type": "feature",
-          "text": "die Kellner-Abrechnung liegt jetzt an der Kasse, nicht im Backoffice"
+          "text": "Filter im Checkout-Dashboard"
         }
       ]
     },
