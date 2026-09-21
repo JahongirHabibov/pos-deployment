@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-21T10:19:22Z",
+  "updated_at": "2026-09-21T10:19:53Z",
   "services": {
     "backend": {
       "version": "v0.5.55",
@@ -20,30 +20,34 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.56",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.56",
-      "digest": "sha256:ecac1d2026b0159516854c95c95f5e3f47547791da9f590e0a2a898b91f1ad7a",
-      "date": "2026-09-20",
+      "version": "v0.5.57",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.57",
+      "digest": "sha256:94b32067c0ab372bffd55c19fea162175b3d8c6ce83a0f31123d6911aaa15281",
+      "date": "2026-09-21",
       "changes": [
         {
-          "type": "feature",
-          "text": "der Kassierer nimmt Geld an, ohne dass der Kellner es anmelden muss"
-        },
-        {
-          "type": "feature",
-          "text": "Kellner mit Fehlbetrag stehen mit Namen auf der Abrechnung"
-        },
-        {
-          "type": "feature",
-          "text": "eine Karte je Kellner, ein Klick zeigt seinen ganzen Abend"
-        },
-        {
           "type": "fix",
-          "text": "die Abrechnung zeigt Zone und Tisch und aktualisiert sich von selbst"
+          "text": "Zonenfilter, NumPad auf dem Handy und Tippgrößen nach der Durchsicht"
         },
         {
           "type": "feature",
-          "text": "die Kellner-Abrechnung liegt jetzt an der Kasse, nicht im Backoffice"
+          "text": "Zahlenfelder bekommen ein NumPad neben dem Dialog"
+        },
+        {
+          "type": "feature",
+          "text": "Filter im Checkout-Dashboard"
+        },
+        {
+          "type": "feature",
+          "text": "der Abschluss sagt, welche Sitzungen offen bleiben"
+        },
+        {
+          "type": "feature",
+          "text": "Board-Karten ohne doppelte Knöpfe, Aktionen im Zahnrad abschaltbar"
+        },
+        {
+          "type": "feature",
+          "text": "To-Go-Bestellungen lassen sich als Lieferung markieren"
         }
       ]
     },
