@@ -1,21 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-21T11:13:32Z",
+  "updated_at": "2026-09-23T06:20:02Z",
   "services": {
     "backend": {
-      "version": "v0.5.55",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.55",
-      "digest": "sha256:6ae3ef717095e9c1e44bfdeb2c49119bf18c83caa81de020f3cfefa910cac8b7",
-      "date": "2026-09-21",
+      "version": "v0.5.56",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.56",
+      "digest": "sha256:85d6235a973e008cf61e58541e99e0548983156e8041c7a88aaba44840bf2715",
+      "date": "2026-09-23",
       "changes": [
         {
-          "type": "fix",
-          "text": "Zonenfilter, NumPad auf dem Handy und Tippgrößen nach der Durchsicht"
-        },
-        {
           "type": "feature",
-          "text": "Filter im Checkout-Dashboard"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
