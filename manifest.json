@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-23T06:20:02Z",
+  "updated_at": "2026-09-24T13:10:46Z",
   "services": {
     "backend": {
       "version": "v0.5.56",
@@ -16,18 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.58",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.58",
-      "digest": "sha256:b44a58689da13dda92d7f7c0bbdcdcb7ffb7dd6a414635af412cdcc72c69cc1b",
-      "date": "2026-09-21",
+      "version": "v0.5.59",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.59",
+      "digest": "sha256:816e9731f8b899534ec78195eaaa106a6ae607657b39f03d4cc237a040eac9e2",
+      "date": "2026-09-24",
       "changes": [
         {
-          "type": "fix",
-          "text": "vertippte Produkte erscheinen schon beim Tippen"
-        },
-        {
-          "type": "fix",
-          "text": "Suchbegriffe mit Satzzeichen bleiben zusammen"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
