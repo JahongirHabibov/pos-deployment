@@ -1,21 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-09-28T13:05:11Z",
+  "updated_at": "2026-09-28T13:05:55Z",
   "services": {
     "backend": {
-      "version": "v0.5.58",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.58",
-      "digest": "sha256:f849bb88bb1ef2dc1ad4ab2a072f63788913a669f79338ab39e0fc153d5de245",
-      "date": "2026-09-26",
+      "version": "v0.5.59",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.59",
+      "digest": "sha256:eb3f297a3b79176d2a9672208f73475972a3c192d2ee07069121e4ff03aeaaed",
+      "date": "2026-09-28",
       "changes": [
         {
-          "type": "fix",
-          "text": "Steuer-Nachtrag lässt updated_at der Bestellungen unverändert"
-        },
-        {
-          "type": "fix",
-          "text": "Vergütungsbasis pro Mitarbeiter, schnelle Finanzberichte"
+          "type": "feature",
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
