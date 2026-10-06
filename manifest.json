@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-06T15:15:22Z",
+  "updated_at": "2026-10-06T15:16:34Z",
   "services": {
     "backend": {
       "version": "v0.5.60",
@@ -16,14 +16,38 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.62",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.62",
-      "digest": "sha256:1e7dec3b5663035131f083a01339b77253b8f467bcadc51ab880da280a7f0777",
-      "date": "2026-09-29",
+      "version": "v0.5.63",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.63",
+      "digest": "sha256:87008c4b0d2f96f6e4770add8c7ba509d09dfecd38f63aece8a8513339c6723f",
+      "date": "2026-10-06",
       "changes": [
         {
+          "type": "fix",
+          "text": "Tagesabschluss führt von \"Mitarbeiter eingestempelt\" direkt zu den Schichten"
+        },
+        {
+          "type": "fix",
+          "text": "Abschluss-Dialoge färben nach Bedeutung — Blocker rot, Hinweis orange"
+        },
+        {
+          "type": "fix",
+          "text": "Storno-Knöpfe im Dashboard touchgroß, Storno-Regeln vollständig getestet"
+        },
+        {
           "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "text": "Produktsuche in der Kopfzeile, neue Filter, Übernehmen-Leiste bleibt sichtbar, schmalere Bildschirmtastatur"
+        },
+        {
+          "type": "feature",
+          "text": "Bilder-Seite – viele Bilder auf einmal hochladen und zuordnen, iPhone-Fotos gehen"
+        },
+        {
+          "type": "fix",
+          "text": "Stadt ist bei Lieferadressen kein Pflichtfeld mehr"
+        },
+        {
+          "type": "fix",
+          "text": "Tagesabschluss gesperrt, solange Gäste noch offen sind"
         }
       ]
     },
