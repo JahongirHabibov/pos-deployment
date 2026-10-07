@@ -1,29 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-06T15:17:10Z",
+  "updated_at": "2026-10-07T10:39:57Z",
   "services": {
     "backend": {
-      "version": "v0.5.61",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.61",
-      "digest": "sha256:17e0825a38f24856401d2151ddee2f715db0ca065487525c61bf05b53cc811a1",
-      "date": "2026-10-06",
+      "version": "v0.5.62",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.62",
+      "digest": "sha256:c117577e762c5c4eb22d9cae744d6da8ae40de757af13614135a66f8cd94ee97",
+      "date": "2026-10-07",
       "changes": [
         {
-          "type": "fix",
-          "text": "Storno-Knöpfe im Dashboard touchgroß, Storno-Regeln vollständig getestet"
-        },
-        {
           "type": "feature",
-          "text": "Bilder-Seite – viele Bilder auf einmal hochladen und zuordnen, iPhone-Fotos gehen"
-        },
-        {
-          "type": "fix",
-          "text": "Stadt ist bei Lieferadressen kein Pflichtfeld mehr"
-        },
-        {
-          "type": "fix",
-          "text": "Tagesabschluss gesperrt, solange Gäste noch offen sind"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
