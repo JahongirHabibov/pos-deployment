@@ -1,17 +1,33 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-11T16:23:40Z",
+  "updated_at": "2026-10-11T19:13:17Z",
   "services": {
     "backend": {
-      "version": "v0.5.72",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.72",
-      "digest": "sha256:8ddce9174046c76f0be025139446ceeac75312defb478a3a97027ed8fea00dcd",
+      "version": "v0.5.73",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.73",
+      "digest": "sha256:adcae43516ef0ff5e1aa2be03be6915633e3876f127597e0891cbdaf91c85a6e",
       "date": "2026-10-11",
       "changes": [
         {
+          "type": "fix",
+          "text": "schnelle Produktsuche im Regel-Dialog, gut lesbare Warnfarben"
+        },
+        {
           "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "text": "Lieferkunden im Lieferdialog alphabetisch ohne Tippen"
+        },
+        {
+          "type": "feature",
+          "text": "Küchendrucker je Bestellart – Restaurant, To-Go, Lieferung"
+        },
+        {
+          "type": "fix",
+          "text": "Rasterbons wie Textbons, Vorschau auf dem echten Drucker"
+        },
+        {
+          "type": "feature",
+          "text": "Bon-Designer für Kassen- und Küchenbons"
         }
       ]
     },
