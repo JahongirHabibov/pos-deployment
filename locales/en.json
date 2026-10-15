@@ -72,6 +72,7 @@
   "s3_hw_profile": "✓ Database profile {profile} (disk and RAM detected) written to .env.",
   "s3_hw_profile_manual": "  Database profile set to manual in .env — PG_* values left unchanged.",
   "s3_updater_token": "✓ Service token for the updater generated and written to .env.",
+  "s3_redis_password": "✓ Redis password generated and written to .env.",
   "s3_log_cancelled": "⊘ Deployment cancelled.",
   "s3_log_pull_fail": "\n✗ Image pull failed. Please check the GHCR credentials.",
   "s3_log_fail": "\n✗ Deployment failed. Please check the log.",

@@ -480,6 +480,22 @@ def _ensure_updater_token() -> bool:
     return True
 
 
+REDIS_PASSWORD_ENV_KEY = "REDIS_PASSWORD"
+REDIS_PASSWORD_PLACEHOLDER = "change_me"  # the value .env.example ships with
+
+
+def _ensure_redis_password() -> bool:
+    """Replace an empty or placeholder Redis password. Returns True if a new
+    one was written. Hex only: compose splits the redis command line itself, so
+    quotes, spaces or `$` in the value would break it. The value is never
+    logged. Redis keeps no data on disk, so a new password costs nothing."""
+    current = _read_env_keys([REDIS_PASSWORD_ENV_KEY]).get(REDIS_PASSWORD_ENV_KEY, "")
+    if current and current != REDIS_PASSWORD_PLACEHOLDER:
+        return False
+    _patch_env_keys({REDIS_PASSWORD_ENV_KEY: secrets.token_hex(32)})
+    return True
+
+
 def _export_env_to_os_environ(env: dict) -> None:
     """Inject .env variables into *env* dict (os.environ copy)."""
     if not ENV_FILE.is_file():
@@ -2163,6 +2179,8 @@ class InstallerApp:
                 # container once.
                 if _ensure_updater_token():
                     self._log(self._s3_log, t("s3_updater_token"), C_SUCCESS)
+                if _ensure_redis_password():
+                    self._log(self._s3_log, t("s3_redis_password"), C_SUCCESS)
                 profile = _apply_host_profile()
                 self._log(self._s3_log, "")
                 if profile is None:

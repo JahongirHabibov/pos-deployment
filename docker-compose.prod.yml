@@ -77,13 +77,19 @@ services:
   # ===========================================================================
   # CACHE - Redis 8
   # ===========================================================================
+  # Redis holds nothing that must survive a restart: response cache, rate-limit
+  # buckets, token blacklist and a license cache whose source is PostgreSQL. So
+  # it keeps nothing on disk. An append-only file torn by a power cut used to
+  # stop Redis from starting, and with it the backend and the whole till.
+  #
+  # The version is pinned: `docker compose pull` must not swap Redis underneath
+  # a running till. REDIS_PASSWORD must not be empty — the Redis 8 entrypoint
+  # appends --loadmodule arguments, and a bare --requirepass swallows them.
   redis:
-    image: redis:8-alpine
+    image: redis:8.10-alpine
     container_name: pos-redis
     hostname: pos-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - pos-redis-data:/data
+    command: redis-server --appendonly no --save "" --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     networks:
       - pos-network
     restart: unless-stopped
@@ -349,8 +355,6 @@ services:
 volumes:
   pos-db-data:
     name: pos-db-data
-  pos-redis-data:
-    name: pos-redis-data
   pos-image-data:
     name: pos-image-data
   pos-backup-state:

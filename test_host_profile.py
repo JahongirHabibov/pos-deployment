@@ -9,6 +9,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 import host_profile
 from host_profile import build_profile, detect_memory_bytes, detect_rotational
 
@@ -133,6 +135,39 @@ def test_installer_generates_updater_token_once(monkeypatch, tmp_path):
     assert installer._read_env_keys(["UPDATER_API_TOKEN"])["UPDATER_API_TOKEN"] == first
     assert env.read_text(encoding="utf-8").count("UPDATER_API_TOKEN=") == 1
     assert env.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("initial", ["REDIS_PASSWORD=\n", "REDIS_PASSWORD=change_me\n", ""])
+def test_installer_replaces_missing_or_placeholder_redis_password(monkeypatch, tmp_path, initial):
+    installer = __import__("installer")
+    env = tmp_path / ".env"
+    env.write_text(initial + "OTHER=1\n", encoding="utf-8")
+    monkeypatch.setattr(installer, "ENV_FILE", env)
+    assert installer._ensure_redis_password() is True
+    first = installer._read_env_keys(["REDIS_PASSWORD"])["REDIS_PASSWORD"]
+    assert re.fullmatch(r"[0-9a-f]{64}", first)
+    assert installer._ensure_redis_password() is False
+    assert installer._read_env_keys(["REDIS_PASSWORD"])["REDIS_PASSWORD"] == first
+    assert env.read_text(encoding="utf-8").count("REDIS_PASSWORD=") == 1
+    assert env.stat().st_mode & 0o777 == 0o600
+
+
+def test_installer_keeps_a_provisioned_redis_password(monkeypatch, tmp_path):
+    installer = __import__("installer")
+    env = tmp_path / ".env"
+    env.write_text("REDIS_PASSWORD=provisioned\n", encoding="utf-8")
+    monkeypatch.setattr(installer, "ENV_FILE", env)
+    assert installer._ensure_redis_password() is False
+    assert installer._read_env_keys(["REDIS_PASSWORD"])["REDIS_PASSWORD"] == "provisioned"
+
+
+def test_compose_redis_keeps_nothing_on_disk_and_is_pinned():
+    compose = (REPO_DIR / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    # A torn append-only file after a power cut kept Redis — and the till — down.
+    assert "--appendonly no --save \"\"" in compose
+    assert "pos-redis-data" not in compose
+    assert re.search(r"image: redis:\d+\.\d+-alpine", compose)
+    assert "${REDIS_PASSWORD:?" in compose
 
 
 def test_compose_passes_updater_token_to_the_updater():

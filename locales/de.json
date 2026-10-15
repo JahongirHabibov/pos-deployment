@@ -72,6 +72,7 @@
   "s3_hw_profile": "✓ Datenbank-Profil {profile} (Festplatte und RAM erkannt) in .env eingetragen.",
   "s3_hw_profile_manual": "  Datenbank-Profil steht in .env auf manual — PG_*-Werte bleiben unverändert.",
   "s3_updater_token": "✓ Dienst-Token für den Updater erzeugt und in .env eingetragen.",
+  "s3_redis_password": "✓ Redis-Passwort erzeugt und in .env eingetragen.",
   "s3_log_cancelled": "⊘ Deployment abgebrochen.",
   "s3_log_pull_fail": "\n✗ Image-Pull fehlgeschlagen. Bitte die GHCR-Zugangsdaten prüfen.",
   "s3_log_fail": "\n✗ Deployment fehlgeschlagen. Bitte den Log prüfen.",
