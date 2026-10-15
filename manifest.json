@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-11T19:13:47Z",
+  "updated_at": "2026-10-15T16:17:30Z",
   "services": {
     "backend": {
       "version": "v0.5.73",
@@ -32,34 +32,34 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.73",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.73",
-      "digest": "sha256:c39ec7dc65effe15bf2dac618a05b940dcdc441522f23860c683bb77217de0bc",
-      "date": "2026-10-11",
+      "version": "v0.5.75",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.75",
+      "digest": "sha256:226eec5270454e40cd46ae2150430ffb12ae92bc4a576c812dd61e9b44abac15",
+      "date": "2026-10-15",
       "changes": [
         {
           "type": "fix",
-          "text": "schnelle Produktsuche im Regel-Dialog, gut lesbare Warnfarben"
+          "text": "Storno-Bon nur mit dem Nötigen, gesendete Artikel nur noch stornierbar"
+        },
+        {
+          "type": "feature",
+          "text": "Storno-Bon zeigt nur die stornierten Artikel, Storno-Bon standardmäßig an"
         },
         {
           "type": "fix",
-          "text": "Standard-Vorlagen mit Namen, keine leeren Auswahlfelder"
-        },
-        {
-          "type": "feature",
-          "text": "Lieferkunden im Lieferdialog alphabetisch ohne Tippen"
-        },
-        {
-          "type": "feature",
-          "text": "Küchendrucker je Bestellart – Restaurant, To-Go, Lieferung"
+          "text": "„Ресторан“ führt direkt zu Gästezahl bzw. Tischen, Zwischenseite entfernt"
         },
         {
           "type": "fix",
-          "text": "Rasterbons wie Textbons, Vorschau auf dem echten Drucker"
+          "text": "„Zählung abbrechen“ in der Kassenkarte unter dem Hinweis, Test für den Analyse-Schritt"
         },
         {
           "type": "feature",
-          "text": "Bon-Designer für Kassen- und Küchenbons"
+          "text": "Kassenzählung lässt sich abbrechen"
+        },
+        {
+          "type": "fix",
+          "text": "Lieferkosten als kompakte Box mit Auswahldialog, „Keine“ als Standard, kein UNBEZAHLT mehr"
         }
       ]
     },
