@@ -1,33 +1,33 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-15T16:17:30Z",
+  "updated_at": "2026-10-15T16:18:14Z",
   "services": {
     "backend": {
-      "version": "v0.5.73",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.73",
-      "digest": "sha256:adcae43516ef0ff5e1aa2be03be6915633e3876f127597e0891cbdaf91c85a6e",
-      "date": "2026-10-11",
+      "version": "v0.5.75",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.75",
+      "digest": "sha256:06f21b6ba8949553b19e4854f4c1f993da48cbe6ed022694010f34aac9d53fa9",
+      "date": "2026-10-15",
       "changes": [
         {
           "type": "fix",
-          "text": "schnelle Produktsuche im Regel-Dialog, gut lesbare Warnfarben"
+          "text": "Storno-Bon nur mit dem Nötigen, gesendete Artikel nur noch stornierbar"
         },
         {
           "type": "feature",
-          "text": "Lieferkunden im Lieferdialog alphabetisch ohne Tippen"
+          "text": "Storno-Bon zeigt nur die stornierten Artikel, Storno-Bon standardmäßig an"
+        },
+        {
+          "type": "perf",
+          "text": "Küchenbons gehen ohne künstliche Wartezeit an den Drucker"
         },
         {
           "type": "feature",
-          "text": "Küchendrucker je Bestellart – Restaurant, To-Go, Lieferung"
+          "text": "Kassenzählung lässt sich abbrechen"
         },
         {
           "type": "fix",
-          "text": "Rasterbons wie Textbons, Vorschau auf dem echten Drucker"
-        },
-        {
-          "type": "feature",
-          "text": "Bon-Designer für Kassen- und Küchenbons"
+          "text": "Lieferkosten als kompakte Box mit Auswahldialog, „Keine“ als Standard, kein UNBEZAHLT mehr"
         }
       ]
     },
