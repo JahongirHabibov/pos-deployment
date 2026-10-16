@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-16T10:59:25Z",
+  "updated_at": "2026-10-16T10:59:51Z",
   "services": {
     "backend": {
       "version": "v0.5.76",
@@ -20,34 +20,18 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.75",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.75",
-      "digest": "sha256:226eec5270454e40cd46ae2150430ffb12ae92bc4a576c812dd61e9b44abac15",
-      "date": "2026-10-15",
+      "version": "v0.5.76",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.76",
+      "digest": "sha256:746b8136c1ef398d001edf602823830e527028ae213ff2a599979ef28f8b0b95",
+      "date": "2026-10-16",
       "changes": [
         {
-          "type": "fix",
-          "text": "Storno-Bon nur mit dem Nötigen, gesendete Artikel nur noch stornierbar"
-        },
-        {
           "type": "feature",
-          "text": "Storno-Bon zeigt nur die stornierten Artikel, Storno-Bon standardmäßig an"
+          "text": "Verkauf ohne Bestand erfassen statt blockieren, Sperre nur per Einstellung"
         },
         {
           "type": "fix",
-          "text": "„Ресторан“ führt direkt zu Gästezahl bzw. Tischen, Zwischenseite entfernt"
-        },
-        {
-          "type": "fix",
-          "text": "„Zählung abbrechen“ in der Kassenkarte unter dem Hinweis, Test für den Analyse-Schritt"
-        },
-        {
-          "type": "feature",
-          "text": "Kassenzählung lässt sich abbrechen"
-        },
-        {
-          "type": "fix",
-          "text": "Lieferkosten als kompakte Box mit Auswahldialog, „Keine“ als Standard, kein UNBEZAHLT mehr"
+          "text": "Barzahlung über mehrere Bestellungen keine Teilzahlung mehr, Lieferbeträge lesbar"
         }
       ]
     },
