@@ -1,21 +1,17 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-18T11:56:33Z",
+  "updated_at": "2026-10-18T11:57:32Z",
   "services": {
     "backend": {
-      "version": "v0.5.76",
-      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.76",
-      "digest": "sha256:e14f83dce1cb97cea9d2c1e89ffac79bb83498291f376ba4cd44381d6203abb9",
-      "date": "2026-10-16",
+      "version": "v0.5.77",
+      "image": "ghcr.io/jahongirhabibov/pos-backend:0.5.77",
+      "digest": "sha256:465fcc9cbd70ffcac1ff133418af748e4f9fd73827e98a3fd4f38eccaafe71f0",
+      "date": "2026-10-18",
       "changes": [
         {
           "type": "feature",
-          "text": "Verkauf ohne Bestand erfassen statt blockieren, Sperre nur per Einstellung"
-        },
-        {
-          "type": "fix",
-          "text": "Barzahlung über mehrere Bestellungen keine Teilzahlung mehr, Lieferbeträge lesbar"
+          "text": "Systemverbesserungen und Fehlerbehebungen"
         }
       ]
     },
