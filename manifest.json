@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "channel": "stable",
-  "updated_at": "2026-10-22T15:52:24Z",
+  "updated_at": "2026-10-27T18:52:26Z",
   "services": {
     "backend": {
       "version": "v0.5.79",
@@ -16,14 +16,14 @@
       ]
     },
     "frontend": {
-      "version": "v0.5.79",
-      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.79",
-      "digest": "sha256:7805396addd4f48101573bb85daccb3b7b9f5bec73f9c84a8c10bc870d2961cd",
-      "date": "2026-10-22",
+      "version": "v0.5.80",
+      "image": "ghcr.io/jahongirhabibov/pos-frontend:0.5.80",
+      "digest": "sha256:284df19f7a4c00fdc6aa9425354d34f3bd9165075baa3d6e57c02cdb9d2b106f",
+      "date": "2026-10-27",
       "changes": [
         {
-          "type": "feature",
-          "text": "Systemverbesserungen und Fehlerbehebungen"
+          "type": "fix",
+          "text": "Lizenzprüfung meldet den echten Grund, Fehlschläge im Lizenz-Tab sichtbar"
         }
       ]
     },
